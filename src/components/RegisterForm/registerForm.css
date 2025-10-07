@@ -1,0 +1,204 @@
+/* registerForm.css — consistent with global theme (black / white / orange) */
+
+:root {
+  --accent: #ff7a00;
+  --accent-dark: #e56b00;
+  --fg: #1a1a1a;
+  --bg-page: #ffffff;
+  --radius: 12px;
+}
+
+/* Card / container */
+.register-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--bg-page);
+  border-radius: var(--radius);
+  padding: 22px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.register-card-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Headings */
+.register-title {
+  font-family: var(--font-primary);
+  font-size: 28px;
+  margin: 0;
+  color: var(--fg);
+  font-weight: 700;
+}
+
+.register-sub {
+  font-family: var(--font-secondary);
+  font-size: 15px;
+  color: rgba(0, 0, 0, 0.65);
+  margin: 0 0 8px 0;
+}
+
+/* Form layout */
+.register-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.register-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.register-label {
+  font-size: 14px;
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.register-input {
+  height: 44px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #e6e6e6;
+  font-family: var(--font-primary);
+  font-size: 15px;
+  color: var(--fg);
+  background: #fff;
+}
+
+.register-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(255, 122, 0, 0.12);
+  outline: none;
+}
+
+/* Password wrapper & toggle (same patterns as login) */
+.password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input {
+  width: 100%;
+  padding-right: 42px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(0, 0, 0, 0.6);
+  transition: color 0.2s ease-in-out, transform 0.1s ease-in-out;
+}
+
+.password-toggle:hover {
+  color: var(--accent);
+  transform: translateY(-50%) scale(1.05);
+}
+
+.password-toggle svg {
+  pointer-events: none;
+  width: 20px;
+  height: 20px;
+  stroke-width: 2;
+  stroke: currentColor;
+}
+
+/* row helpers */
+.register-row {
+  display: flex;
+  align-items: center;
+}
+.register-between {
+  justify-content: space-between;
+}
+
+/* remember checkbox */
+.register-checkbox {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: rgba(0, 0, 0, 0.7);
+  font-size: 14px;
+}
+
+/* link */
+.register-link {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+/* Submit button */
+.register-submit {
+  width: 100%;
+  height: 44px;
+  font-size: 15px;
+  border-radius: 8px;
+}
+
+/* error */
+.register-error {
+  padding: 10px;
+  background: rgba(211, 47, 47, 0.08);
+  color: #d32f2f;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+/* divider */
+.register-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+  margin-bottom: 2px;
+}
+
+.register-divider::before,
+.register-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.register-divider span {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.register-socials {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.register-signup {
+  text-align: center;
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.65);
+  margin-top: 6px;
+}
+
+@media (max-width: 480px) {
+  .register-card {
+    padding: 16px;
+  }
+  .register-title {
+    font-size: 24px;
+  }
+}

@@ -12,7 +12,7 @@ export default function Header() {
         <Link href="/auth/login" className="btn btn-ghost">
           Login
         </Link>
-        <Link href="/register" className="btn btn-accent">
+        <Link href="/auth/register" className="btn btn-accent">
           Register
         </Link>
       </nav>
