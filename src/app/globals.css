@@ -1,26 +1,234 @@
-@import "tailwindcss";
+/* -------------------------------
+   GLOBAL STYLES — CLEAN VERSION
+   ------------------------------- */
 
+/* -------------------------------
+   GLOBAL FONTS (use Next font variables)
+   Ensure layout.tsx adds the font variables to <html>
+   e.g. className={`${ibmPlexMono.variable} ${josefinSans.variable}`}
+   ------------------------------- */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --font-primary: var(--font-ibm-plex-mono, "Courier New", Courier, monospace);
+  --font-secondary: var(--font-josefin-sans, "Josefin Sans", sans-serif);
+
+  --bg-page: #ffffff;
+  --header-bg: #000000;
+  --fg: #000000;
+  --accent: #ff7a00;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* Reset & defaults */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+html,
+body,
+#__next {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden; /* Prevent horizontal scroll */
+  background: var(--bg-page);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Use primary font for body text */
+html,
+body {
+  font-family: var(--font-primary);
+  font-weight: 400;
+}
+
+/* Root layout wrapper */
+.app-root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden;
+}
+
+/* -------------------------------
+   HEADER / NAVBAR
+   ------------------------------- */
+.app-header {
+  width: 100%;
+  background: var(--header-bg); /* black header */
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 16px 36px;
+  position: sticky;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+.site-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  font-family: var(--font-secondary);
+}
+
+/* Push nav group to far right */
+.header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  white-space: nowrap;
+}
+
+/* -------------------------------
+   BUTTONS
+   ------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  font-family: var(--font-secondary);
+  font-size: 15px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+  border: none;
+}
+
+/* Outline / ghost button (white border on black background) */
+.btn-ghost {
+  background: transparent;
+  color: #ffffff;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+}
+
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Accent button (orange fill) */
+.btn-accent {
+  background: var(--accent);
+  color: #ffffff;
+  border: 2px solid var(--accent);
+  box-shadow: 0 4px 10px rgba(255, 122, 0, 0.18);
+}
+
+.btn-accent:hover {
+  background: #e86e00;
+}
+
+/* -------------------------------
+   MAIN CONTENT AREA
+   ------------------------------- */
+.main-container {
+  flex: 1;
+  background: var(--bg-page); /* white main section */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px 48px;
+  width: 100%;
+  overflow-x: hidden;
+}
+
+/* Center hero section nicely */
+.hero {
+  text-align: center;
+  align-items: center;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 16px; /* prevent edge overflow */
+}
+
+/* Headline uses primary font but can use secondary if you prefer — keep mono for typewriter */
+.hero h1 {
+  font-family: var(--font-primary);
+  font-size: 64px;
+  line-height: 1.05;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+/* body paragraph can use secondary for a clean contrast */
+.hero p {
+  font-family: var(--font-secondary);
+  font-size: 22px;
+  color: rgba(0, 0, 0, 0.7);
+  margin-bottom: 24px;
+}
+
+/* -------------------------------
+   FOOTER
+   ------------------------------- */
+.site-footer {
+  text-align: center;
+  padding: 18px;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.5);
+  background: var(--bg-page);
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+/* -------------------------------
+   RESPONSIVE TWEAKS
+   ------------------------------- */
+@media (max-width: 768px) {
+  .site-title {
+    font-size: 20px;
+  }
+
+  .hero h1 {
+    font-size: 40px;
+  }
+
+  .btn {
+    font-size: 14px;
+    padding: 6px 12px;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* -------------------------------------
+   TYPEWRITER ANIMATION
+   ------------------------------------- */
+
+/* Use primary font for typewriter for authenticity */
+.typewriter {
+  display: inline-block;
+  font-family: var(--font-primary);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Cursor matches accent */
+.cursor {
+  display: inline-block;
+  margin-left: 6px;
+  color: var(--accent);
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  99% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
 }

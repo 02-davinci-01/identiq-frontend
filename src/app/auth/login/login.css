@@ -1,0 +1,201 @@
+/* src/components/LoginForm/loginForm.css — Updated Theme (Orange / Black / White) */
+
+:root {
+  --bg: #ffffff;
+  --card: #ffffff;
+  --text: #1a1a1a;
+  --muted: #666666;
+  --accent: #ff7a00; /* Orange primary */
+  --accent-dark: #e56b00; /* Darker orange for hover */
+  --danger: #d32f2f;
+  --radius: 12px;
+  --shadow: 0 6px 30px rgba(0, 0, 0, 0.08);
+  --font-main: "IBM Plex Sans", "Inter", system-ui, sans-serif;
+}
+
+body,
+html {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-main);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.lf-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 2rem;
+  box-shadow: var(--shadow);
+  border: 1px solid #f2f2f2;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.lf-title {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.lf-subtitle {
+  font-size: 0.95rem;
+  color: var(--muted);
+  margin-bottom: 1rem;
+}
+
+.lf-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.lf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.lf-label {
+  font-size: 0.9rem;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.lf-input {
+  height: 44px;
+  padding: 0.6rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid #dcdcdc;
+  background: #fff;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
+.lf-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 122, 0, 0.25);
+}
+
+.lf-row {
+  display: flex;
+  align-items: center;
+}
+
+.lf-between {
+  justify-content: space-between;
+}
+
+.lf-checkbox {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.lf-link {
+  color: var(--accent);
+  font-size: 0.9rem;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.lf-link:hover {
+  text-decoration: underline;
+  color: var(--accent-dark);
+}
+
+.lf-btn {
+  height: 44px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.95rem;
+  border: none;
+  transition: background 0.2s ease-in-out;
+}
+
+.lf-primary {
+  background: linear-gradient(180deg, var(--accent), var(--accent-dark));
+  color: white;
+}
+
+.lf-primary:hover {
+  background: var(--accent-dark);
+}
+
+.lf-alt {
+  border: 1px solid #dcdcdc;
+  background: #fff;
+  color: var(--text);
+}
+
+.lf-alt:hover {
+  background: #f8f8f8;
+}
+
+.lf-error {
+  padding: 0.6rem 0.9rem;
+  background: rgba(211, 47, 47, 0.1);
+  color: var(--danger);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.lf-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0.8rem 0;
+}
+
+.lf-divider::before,
+.lf-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #e5e5e5;
+}
+
+.lf-divider span {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.lf-socials {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.lf-signup {
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--muted);
+  margin-top: 0.6rem;
+}
+
+.lf-signup a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.lf-signup a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 480px) {
+  .lf-card {
+    padding: 1.5rem;
+  }
+  .lf-title {
+    font-size: 1.4rem;
+  }
+}

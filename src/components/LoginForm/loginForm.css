@@ -1,0 +1,169 @@
+/* src/components/LoginForm/loginForm.css */
+/* Card / container */
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--bg-page); /* white */
+  border-radius: 12px;
+  padding: 22px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.login-card-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Headings */
+.login-title {
+  font-family: var(--font-primary);
+  font-size: 28px;
+  margin: 0;
+  color: var(--fg);
+  font-weight: 700;
+}
+
+.login-sub {
+  font-family: var(--font-secondary);
+  font-size: 15px;
+  color: rgba(0, 0, 0, 0.65);
+  margin: 0 0 8px 0;
+}
+
+/* Form layout */
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.login-label {
+  font-size: 14px;
+  color: var(--fg);
+  font-weight: 600;
+}
+
+/* Inputs: match global font sizes */
+.login-input {
+  height: 44px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #e6e6e6;
+  font-family: var(--font-primary);
+  font-size: 15px;
+  color: var(--fg);
+  background: #fff;
+}
+
+.login-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(255, 122, 0, 0.12);
+  outline: none;
+}
+
+/* row helpers */
+.login-row {
+  display: flex;
+  align-items: center;
+}
+.login-between {
+  justify-content: space-between;
+}
+
+/* remember checkbox */
+.login-checkbox {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: rgba(0, 0, 0, 0.7);
+  font-size: 14px;
+}
+
+/* link button for forgot */
+.login-link-btn {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 4px;
+}
+
+/* Submit button uses global .btn-accent (defined in globals). Provide a fallback style. */
+.login-submit {
+  width: 100%;
+  height: 44px;
+  font-size: 15px;
+  border-radius: 8px;
+}
+
+/* error */
+.login-error {
+  padding: 10px;
+  background: rgba(211, 47, 47, 0.08);
+  color: #d32f2f;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+/* divider */
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+  margin-bottom: 2px;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.login-divider span {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+/* socials row uses global .btn-ghost */
+.login-socials {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* signup text */
+.login-signup {
+  text-align: center;
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.65);
+  margin-top: 6px;
+}
+
+.login-link {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* responsiveness */
+@media (max-width: 480px) {
+  .login-card {
+    padding: 16px;
+  }
+
+  .login-title {
+    font-size: 24px;
+  }
+}
