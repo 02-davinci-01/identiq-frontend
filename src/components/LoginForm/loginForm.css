@@ -167,3 +167,48 @@
     font-size: 24px;
   }
 }
+
+/* -------------------------------
+   PASSWORD FIELD FORMATTING
+   ------------------------------- */
+
+.password-wrapper {
+  position: relative; /* allows absolutely positioning the eye button */
+  display: flex;
+  align-items: center;
+}
+
+.password-input {
+  width: 100%;
+  padding-right: 42px; /* reserve space for the eye button */
+}
+
+/* The button that contains the eye icon */
+.password-toggle {
+  position: absolute;
+  right: 10px; /* aligns icon inside input */
+  top: 50%;
+  transform: translateY(-50%); /* vertical centering */
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(0, 0, 0, 0.6); /* grayish by default */
+  transition: color 0.2s ease-in-out, transform 0.1s ease-in-out;
+}
+
+.password-toggle:hover {
+  color: var(--accent); /* your orange accent */
+  transform: translateY(-50%) scale(1.05);
+}
+
+/* The Eye / EyeOff Lucide icon */
+.password-icon {
+  pointer-events: none; /* makes the icon itself ignore clicks (button handles them) */
+  width: 20px;
+  height: 20px;
+  stroke-width: 2;
+  stroke: currentColor; /* inherits color from the button */
+}

@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import Modal from "@/components/Modal/Modal";
 import "./loginForm.css";
 
@@ -12,6 +13,7 @@ export default function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,6 +45,7 @@ export default function LoginForm() {
   };
 
   return (
+    //im the toggle branch
     <>
       <div className="login-card" role="region" aria-labelledby="lf-heading">
         <div className="login-card-inner">
@@ -76,15 +79,31 @@ export default function LoginForm() {
 
             <label className="login-field">
               <span className="login-label">Password</span>
-              <input
-                className="login-input"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                autoComplete="current-password"
-              />
+
+              <div className="password-wrapper">
+                <input
+                  className="login-input password-input"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                />
+
+                <button
+                  type="button"
+                  className="password-toggle"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  onClick={() => setShowPassword((prev) => !prev)}
+                >
+                  {showPassword ? (
+                    <EyeOff className="password-icon" size={20} />
+                  ) : (
+                    <Eye className="password-icon" size={20} />
+                  )}
+                </button>
+              </div>
             </label>
 
             <div className="login-row login-between">
@@ -118,14 +137,14 @@ export default function LoginForm() {
               <span>or</span>
             </div>
 
-            <div className="login-socials">
+            {/* <div className="login-socials">
               <button type="button" className="btn btn-ghost">
                 Sign in with Google
               </button>
               <button type="button" className="btn btn-ghost">
                 Sign in with GitHub
               </button>
-            </div>
+            </div> */}
 
             <p className="login-signup">
               New here?{" "}
@@ -145,7 +164,7 @@ export default function LoginForm() {
       >
         <div style={{ padding: "8px 0" }}>
           <p style={{ marginBottom: 12 }}>
-            Enter your email and well send a reset link.
+            `Enter your email and we will send a reset link.`
           </p>
           <input
             className="login-input"
