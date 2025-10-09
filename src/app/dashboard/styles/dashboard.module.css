@@ -1,0 +1,364 @@
+/* app/dashboard/styles/dashboard.module.css
+   Adjusted: increased topbar height, ensured logout contrast, selected card zoom, sidebar offset.
+*/
+
+:root {
+  /* sensible defaults if not set by JS */
+  --accent: #c96a2b;
+  --accent-rgb: 201, 106, 43;
+  --accent-2: #dab187;
+  --accent-foreground: #fff;
+  --header-bg: var(--accent);
+  --top-left-bg: var(--accent);
+  --top-left-bg-2: var(--accent-2);
+}
+
+/* small safety: module-local box-sizing where needed */
+:local(.dmRoot) {
+  min-height: 100vh;
+  display: block;
+  background: var(--bg-page);
+  color: var(--fg);
+  /* increased to match the taller topbar so nothing clips under it */
+  padding-top: 72px;
+  box-sizing: border-box;
+}
+
+/* Topbar: fixed, full width — increased height to avoid clipping */
+:local(.topbar) {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 72px; /* increased from 56 to 72 to avoid top clipping */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 36px; /* match globals.css horizontal padding (36px) */
+  background: var(--header-bg);
+  color: var(--accent-foreground);
+  z-index: 140;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+}
+
+/* Brand styling to match .site-title in globals.css */
+:local(.brand) {
+  font-family: var(--font-secondary, "Josefin Sans", sans-serif);
+  font-size: 28px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  text-transform: lowercase;
+}
+
+/* Topbar actions wrapper for alignment (uses global .btn sizes) */
+:local(.topbarActions) {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  white-space: nowrap;
+}
+
+/* Ensure the logout button is always visible against the header by using a subtle translucent background/border */
+:local(.logoutBtn) {
+  /* mix with accent foreground so it stands out on both light/dark accents */
+  background: rgba(255, 255, 255, 0.12) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  color: var(--accent-foreground) !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+/* Sidebar */
+:local(.sidebar) {
+  position: fixed;
+  top: 72px; /* move down to match taller header */
+  left: 0;
+  bottom: 0;
+  width: 220px;
+  padding: 18px;
+  background: var(--panel, #fff);
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
+  z-index: 80;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+}
+
+:local(.avatar) {
+  display: none;
+}
+
+:local(.nav) {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+:local(.sbItem) {
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: var(--fg);
+  text-decoration: none;
+  font-weight: 700;
+  transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease,
+    transform 0.08s ease;
+  position: relative;
+  z-index: 1;
+}
+
+/* Sidebar hover now uses accent variables */
+:local(.sbItem):hover {
+  background: rgba(var(--accent-rgb), 0.08);
+  color: var(--accent-foreground);
+  box-shadow: 0 10px 24px rgba(var(--accent-rgb), 0.06);
+  transform: translateY(-2px);
+}
+
+:local(.active) {
+  background: var(--header-bg);
+  color: var(--accent-foreground);
+  border-left: 4px solid var(--accent);
+  padding-left: 10px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.12);
+}
+
+/* ---------- MAIN: center content and avoid overflow ---------- */
+:local(.dmMain) {
+  margin-left: 220px; /* leave space for fixed sidebar */
+  padding: 36px 20px;
+  min-height: calc(100vh - 72px);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  box-sizing: border-box;
+}
+
+/* Content container: prevent right cutoff */
+:local(.contentContainer) {
+  width: min(1200px, calc(100% - 120px));
+  max-width: 1200px;
+  margin: 0 auto;
+  min-height: 70vh;
+  padding-right: 8px;
+  box-sizing: border-box;
+}
+
+/* ---------- Info row ---------- */
+:local(.infoRow),
+:local(.dashboardPage_topRow) {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-wrap: nowrap;
+}
+
+:local(.welcome),
+:local(.count),
+:local(.date) {
+  height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-weight: 700;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  font-family: var(--font-secondary);
+  font-size: 24px;
+}
+
+/* date small style preserved */
+:local(.date) {
+  height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-weight: 700;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  font-family: var(--font-secondary);
+  font-size: 12px;
+}
+
+/* use accent vars for the top three rectangles */
+:local(.welcome) {
+  flex: 1;
+  background: linear-gradient(90deg, var(--top-left-bg), var(--top-left-bg-2));
+  color: var(--accent-foreground);
+  padding: 0 18px;
+  letter-spacing: 0.3px;
+}
+:local(.count),
+:local(.date) {
+  width: 150px;
+  background: linear-gradient(180deg, var(--top-left-bg), var(--top-left-bg-2));
+  color: var(--accent-foreground);
+}
+
+/* keep children spacing */
+:local(.welcome) > *,
+:local(.count) > *,
+:local(.date) > * {
+  margin: 0;
+  line-height: 1;
+}
+
+/* ---------- Themes card ---------- */
+:local(.themesCard) {
+  padding: 18px;
+  border-radius: 12px;
+  background: var(--panel, #fff);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  margin-bottom: 22px;
+  box-shadow: 0 48px 120px rgba(0, 0, 0, 0.04), 0 12px 40px rgba(0, 0, 0, 0.06);
+}
+
+/* title */
+:local(.themesCard_h3) {
+  margin: 0 0 12px 0;
+  color: rgba(0, 0, 0, 0.6);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+}
+
+/* grid */
+:local(.themesGrid) {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  justify-content: center;
+  align-items: start;
+  max-width: 1040px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* theme card styling + hover animation */
+:local(.themePreview) {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border-radius: 10px;
+  min-height: 260px;
+  background: linear-gradient(180deg, #fff, #fafafa);
+  border: 1px solid rgba(0, 0, 0, 0.03);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.06);
+  width: 320px;
+  box-sizing: border-box;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  cursor: pointer;
+}
+
+:local(.themePreview):hover {
+  transform: scale(1.03);
+  box-shadow: 0 18px 50px rgba(var(--accent-rgb), 0.25),
+    0 12px 30px rgba(0, 0, 0, 0.08);
+}
+
+/* selected is slightly larger than hover (more 'zoomed-in') */
+:local(.selected) {
+  outline: 3px solid rgba(var(--accent-rgb), 0.12);
+  box-shadow: 0 20px 62px rgba(var(--accent-rgb), 0.16);
+  transform: scale(1.07);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
+}
+
+/* small applied label style (disabled button already indicates applied) */
+:local(.btnSmall[disabled]) {
+  opacity: 0.9;
+  cursor: default;
+  transform: none;
+  box-shadow: none;
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--fg);
+  font-weight: 700;
+}
+
+/* image box */
+:local(.previewBox) {
+  height: 170px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.01));
+}
+
+/* bottom area */
+:local(.previewActions) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+}
+
+:local(.labelStrong) {
+  font-weight: 700;
+  color: var(--fg);
+  font-size: 14px;
+}
+
+/* Apply button — now uses accent and accent-based shadows */
+:local(.btnSmall) {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-foreground);
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 12px 30px rgba(var(--accent-rgb), 0.14);
+  transition: all 0.25s ease-in-out;
+}
+
+:local(.btnSmall):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 45px rgba(var(--accent-rgb), 0.3);
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+
+/* hide widgets for now */
+:local(.widgetsGrid) {
+  display: none;
+}
+
+/* ---------- Responsive adjustments ---------- */
+@media (max-width: 1100px) {
+  :local(.themePreview) {
+    width: 300px;
+    min-height: 240px;
+  }
+  :local(.themesGrid) {
+    gap: 14px;
+  }
+}
+@media (max-width: 980px) {
+  :local(.sidebar) {
+    position: relative;
+    width: 100%;
+    top: 0;
+    left: 0;
+    height: auto;
+    border-right: none;
+  }
+  :local(.dmMain) {
+    margin-left: 0;
+    padding: 18px;
+  }
+  :local(.themesGrid) {
+    grid-template-columns: 1fr;
+    max-width: 100%;
+  }
+  :local(.themePreview) {
+    width: 100%;
+    min-height: 220px;
+  }
+  :local(.count),
+  :local(.date) {
+    width: 100%;
+    height: 56px;
+    font-size: 14px;
+  }
+}
