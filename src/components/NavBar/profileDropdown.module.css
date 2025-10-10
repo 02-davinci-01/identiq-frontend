@@ -1,0 +1,216 @@
+/* profileDropdown.module.css
+   Uses project variables so styles adapt to themes:
+   --accent, --accent-rgb, --accent-foreground, --header-bg, --fg, --panel
+   Also uses project fonts via CSS variables:
+   --font-secondary (used for topbar brand) kept consistent
+*/
+
+.wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+/* Trigger: match project font + inherit color so it remains visible in dark theme */
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: transparent;
+  color: inherit; /* IMPORTANT: inherit from topbar (uses --accent-foreground) */
+  border: 1px solid rgba(255, 255, 255, 0.06); /* subtle by default */
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+  font-family: var(--font-secondary, "Josefin Sans", sans-serif);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+/* Slight hover that's theme-aware */
+.trigger:hover {
+  background: rgba(var(--accent-rgb, 201, 106, 43), 0.06);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(var(--accent-rgb, 201, 106, 43), 0.06);
+}
+
+/* small caret */
+.caret {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+/* keep trigger text explicit so we can style if needed */
+.triggerText {
+  line-height: 1;
+}
+
+/* dropdown container */
+.dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  width: 340px;
+  background: var(--panel, #fff);
+  border-radius: 12px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.14);
+  padding: 14px;
+  z-index: 300;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-sizing: border-box;
+  animation: popIn 180ms cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+
+/* subtle open animation */
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.labelText {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.55);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.input {
+  height: 40px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  font-size: 14px;
+  color: var(--fg, #111);
+  background: transparent;
+  outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+/* ensure focus stands out in all themes */
+.input:focus {
+  border-color: rgba(var(--accent-rgb, 201, 106, 43), 0.9);
+  box-shadow: 0 6px 18px rgba(var(--accent-rgb, 201, 106, 43), 0.08);
+}
+
+/* primary save action */
+.actionsRow {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.saveBtn {
+  background: var(--accent, #c96a2b);
+  color: var(--accent-foreground, #fff);
+  font-weight: 800;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 12px 30px rgba(var(--accent-rgb, 201, 106, 43), 0.14);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+.saveBtn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 40px rgba(var(--accent-rgb, 201, 106, 43), 0.22);
+}
+
+/* divider */
+.divider {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.06);
+  margin: 10px 0;
+  border-radius: 1px;
+}
+
+/* stacked secondary actions */
+.secondaryActions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+/* base secondary button */
+.secondaryBtn {
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease,
+    transform 140ms ease;
+  text-align: left;
+}
+
+/* Change password: soft accent variant that sits well with orange/teal/black */
+.changePasswordBtn {
+  background: rgba(var(--accent-rgb, 201, 106, 43), 0.06);
+  border: 1px solid rgba(var(--accent-rgb, 201, 106, 43), 0.18);
+  color: var(--accent, #c96a2b);
+}
+.changePasswordBtn:hover {
+  background: rgba(var(--accent-rgb, 201, 106, 43), 0.12);
+  border-color: rgba(var(--accent-rgb, 201, 106, 43), 0.28);
+  transform: translateY(-1px);
+}
+
+/* Delete account: white button with subtle grey border and red text */
+.deleteBtn {
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  color: #b11;
+}
+.deleteBtn:hover {
+  background: #ffeaea;
+  border-color: rgba(177, 17, 17, 0.2);
+  color: #900;
+  transform: translateY(-1px);
+}
+
+/* messages */
+.feedback {
+  margin-top: 8px;
+  font-size: 13px;
+  padding: 8px;
+  border-radius: 8px;
+  text-align: center;
+}
+.error {
+  background: rgba(255, 230, 230, 0.95);
+  color: #7a0000;
+}
+.success {
+  background: rgba(230, 255, 230, 0.95);
+  color: #004d00;
+}
+
+/* responsive */
+@media (max-width: 520px) {
+  .dropdown {
+    left: 8px;
+    right: 8px;
+    width: auto;
+  }
+  .trigger {
+    padding: 8px;
+    font-size: 13px;
+  }
+}

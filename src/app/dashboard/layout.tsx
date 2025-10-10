@@ -9,7 +9,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className={styles.dmRoot}>
+    <div className={styles.dmRoot} suppressHydrationWarning>
       <Topbar />
       <div className={styles.dmBody}>
         <Sidebar />

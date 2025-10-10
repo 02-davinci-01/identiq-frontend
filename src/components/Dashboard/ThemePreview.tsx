@@ -19,7 +19,7 @@ export default function ThemePreview({
   applyLabel?: string;
 }) {
   const handleClick = () => {
-    if (onSelect) onSelect(id);
+    if (typeof onSelect === "function") onSelect(id);
   };
 
   return (
@@ -48,7 +48,7 @@ export default function ThemePreview({
         <button
           className={styles.btnSmall}
           onClick={(e) => {
-            e.stopPropagation(); // don't double-toggle when pressing Apply
+            e.stopPropagation();
             handleClick();
           }}
           disabled={selected}
