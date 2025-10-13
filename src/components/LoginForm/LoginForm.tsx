@@ -3,7 +3,7 @@
 
 import React, { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import Modal from "@/components/Modal/Modal";
+import Modal from "@/components/LModal/LModal";
 import "./loginForm.css";
 
 export default function LoginForm() {

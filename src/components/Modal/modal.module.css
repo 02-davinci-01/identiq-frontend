@@ -1,0 +1,205 @@
+/* modal.module.css
+   Theme-aware: uses your project variables so modal matches theme.
+*/
+
+:root {
+  --modal-width: 540px;
+}
+
+/* backdrop */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 8, 13, 0.45); /* dark overlay */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(6px) saturate(1);
+  -webkit-backdrop-filter: blur(6px) saturate(1);
+  padding: 20px;
+}
+
+/* modal container */
+.modal {
+  width: min(var(--modal-width), 96%);
+  max-height: 90vh;
+  overflow: auto;
+  background: var(--panel, #fff);
+  color: var(--fg, #111);
+  border-radius: 12px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+  padding: 18px;
+  box-sizing: border-box;
+  animation: modalPop 180ms cubic-bezier(0.2, 0.9, 0.2, 1);
+  font-family: var(--font-secondary, "Inter", system-ui, sans-serif);
+}
+
+/* header */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--fg, #111);
+}
+
+.closeBtn {
+  background: transparent;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  color: rgba(0, 0, 0, 0.6);
+}
+.closeBtn:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+/* body */
+.body {
+  padding-top: 10px;
+}
+
+/* inner form layout */
+.formInner {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fieldLabel {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.6);
+  letter-spacing: 0.02em;
+}
+.input {
+  height: 42px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  outline: none;
+  font-size: 14px;
+  background: transparent;
+  color: var(--fg, #111);
+}
+.input:focus {
+  box-shadow: 0 8px 20px rgba(var(--accent-rgb, 201, 106, 43), 0.08);
+  border-color: rgba(var(--accent-rgb, 201, 106, 43), 0.8);
+}
+
+/* footer */
+.footer {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* footer actions */
+.footerActions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* buttons - theme-aware */
+.btnPrimary {
+  background: var(--accent, #c96a2b);
+  color: var(--accent-foreground, #fff);
+  border: none;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 12px 30px rgba(var(--accent-rgb, 201, 106, 43), 0.12);
+}
+.btnGhost {
+  background: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  color: var(--fg, #111);
+  padding: 10px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.btnDanger {
+  background: #fff;
+  border: 1px solid rgba(177, 17, 17, 0.15);
+  color: #b11;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+/* small text blocks */
+.confirmBody {
+  padding: 8px 0 6px 0;
+}
+.confirmText {
+  font-size: 15px;
+  color: rgba(0, 0, 0, 0.8);
+  line-height: 1.4;
+}
+
+/* feedback messages inside modal */
+.error {
+  margin-top: 6px;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(255, 230, 230, 0.95);
+  color: #7a0000;
+  font-weight: 700;
+  text-align: center;
+}
+.success {
+  margin-top: 6px;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(230, 255, 230, 0.95);
+  color: #004d00;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* small pop animation */
+@keyframes modalPop {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* responsive */
+@media (max-width: 640px) {
+  .modal {
+    padding: 14px;
+  }
+  .title {
+    font-size: 16px;
+  }
+  .input {
+    height: 44px;
+  }
+  .footer {
+    padding-top: 8px;
+  }
+}
