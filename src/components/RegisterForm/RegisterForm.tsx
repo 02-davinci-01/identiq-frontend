@@ -2,7 +2,9 @@
 "use client";
 
 import React, { useReducer } from "react";
+import axios from "axios";
 import "./registerForm.css";
+import { showBreadcrumb } from "@/lib/breadcrumb";
 
 type State = {
   userName: string;
@@ -55,7 +57,6 @@ export default function RegisterForm() {
     e.preventDefault();
     dispatch({ type: "SET_ERROR", payload: null });
 
-    // Simple client-side validation
     if (!userName.trim()) {
       dispatch({ type: "SET_ERROR", payload: "Please enter a username." });
       return;
@@ -68,27 +69,45 @@ export default function RegisterForm() {
     try {
       dispatch({ type: "SET_LOADING", payload: true });
 
-      // TODO: call backend to create an account and send verification email
-      // Example: POST /api/auth/register -> backend sends email verification
-      await new Promise((r) => setTimeout(r, 700));
+      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
-      // For now (demo): redirect to complete-register page where user sets password after email verification
-      // Replace with actual redirect once API implements verification flow
-      alert(
-        "Demo: Registration step 1 complete. The next step (set password) happens after email verification."
+      // server expects { name, email } (confirmed from your controller & service). :contentReference[oaicite:2]{index=2} :contentReference[oaicite:3]{index=3}
+      const payload = {
+        name: userName,
+        email,
+        remember: !!remember, // harmless extra field if server ignores it
+      };
+
+      const res = await axios.post(
+        `${base.replace(/\/$/, "")}/auth/register`,
+        payload,
+        {
+          headers: { "Content-Type": "application/json" },
+          timeout: 8000,
+        }
       );
 
+      // If backend returns { message, status } or similar on success, use it.
+      const successMessage =
+        res?.data?.message ?? "Email sent — check your inbox to verify.";
+
+      showBreadcrumb(successMessage, "success");
+
       dispatch({ type: "RESET_FORM" });
-      // e.g. router.push('/auth/complete-register?token=...') after real verification flow
-    } catch (err) {
-      console.error(err);
-      dispatch({
-        type: "SET_ERROR",
-        payload:
-          typeof err === "string"
-            ? err
-            : "Registration failed. Please try again later.",
-      });
+    } catch (err: any) {
+      // axios error normalization
+      let msg = "Registration failed. Please try again.";
+      if (err?.response?.data) {
+        // backend likely returns { message: '...' } or throw BadRequestException
+        if (typeof err.response.data === "string") msg = err.response.data;
+        else if (err.response.data.message) msg = err.response.data.message;
+        else if (err.response.data.error) msg = err.response.data.error;
+      } else if (err?.message) {
+        msg = err.message;
+      }
+      dispatch({ type: "SET_ERROR", payload: msg });
+      showBreadcrumb(msg, "error");
+      console.error("Register error:", err);
     } finally {
       dispatch({ type: "SET_LOADING", payload: false });
     }
@@ -138,6 +157,8 @@ export default function RegisterForm() {
               autoComplete="email"
             />
           </label>
+
+          {/* password removed here: password is set on complete-register after email verification */}
 
           <div className="register-row register-between">
             <label className="register-checkbox">

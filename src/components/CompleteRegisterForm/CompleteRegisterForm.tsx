@@ -1,10 +1,12 @@
-// src/components/CompleteRegistration/CompleteRegisterForm.tsx
 "use client";
 
 import React, { useReducer, useState } from "react";
+import axios from "axios";
 import "./completeRegisterForm.css";
+import { showBreadcrumb } from "@/lib/breadcrumb";
 
 type State = {
+  email: string;
   password: string;
   confirmPassword: string;
   error: string | null;
@@ -12,6 +14,7 @@ type State = {
 };
 
 type Action =
+  | { type: "SET_EMAIL"; payload: string }
   | { type: "SET_PASSWORD"; payload: string }
   | { type: "SET_CONFIRM"; payload: string }
   | { type: "SET_ERROR"; payload: string | null }
@@ -19,6 +22,7 @@ type Action =
   | { type: "RESET" };
 
 const initialState: State = {
+  email: "",
   password: "",
   confirmPassword: "",
   error: null,
@@ -27,6 +31,8 @@ const initialState: State = {
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
+    case "SET_EMAIL":
+      return { ...state, email: action.payload };
     case "SET_PASSWORD":
       return { ...state, password: action.payload };
     case "SET_CONFIRM":
@@ -44,16 +50,28 @@ function reducer(state: State, action: Action): State {
 
 export default function CompleteRegisterForm() {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const { password, confirmPassword, error, loading } = state;
+  const { email, password, confirmPassword, error, loading } = state;
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
+  const getTokenFromLocation = (): string | null => {
+    if (typeof window === "undefined") return null;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("token");
+    } catch {
+      return null;
+    }
+  };
+
   const validate = (): string | null => {
+    if (!email.trim()) return "Please enter your email.";
     if (!password) return "Please enter a new password.";
-    if (password.length < 8)
-      return "Password must be at least 8 characters long.";
+    if (password.length < 2 || password.length > 128)
+      return "Password must be between 2 and 128 characters.";
+    if (!/^[a-zA-Z0-9]+$/.test(password))
+      return "Password must be alphanumeric only.";
     if (password !== confirmPassword) return "Passwords do not match.";
-    // optional: add more checks (numbers, symbols) if desired
     return null;
   };
 
@@ -61,32 +79,57 @@ export default function CompleteRegisterForm() {
     e.preventDefault();
     dispatch({ type: "SET_ERROR", payload: null });
 
-    const vError = validate();
-    if (vError) {
-      dispatch({ type: "SET_ERROR", payload: vError });
+    const validationError = validate();
+    if (validationError) {
+      dispatch({ type: "SET_ERROR", payload: validationError });
       return;
     }
 
     try {
       dispatch({ type: "SET_LOADING", payload: true });
 
-      // TODO: call backend to set password using verification token in query (e.g. ?token=xxx)
-      // For demo, simulate network latency
-      await new Promise((r) => setTimeout(r, 700));
+      const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+      const token = getTokenFromLocation();
 
-      // In real flow: route to login page or dashboard after success
-      alert("Password set successfully. You may now log in.");
+      const url = `${base.replace(/\/$/, "")}/auth/complete-register${
+        token ? `?token=${encodeURIComponent(token)}` : ""
+      }`;
+
+      const payload = {
+        email,
+        password,
+      };
+
+      const res = await axios.post(url, payload, {
+        headers: { "Content-Type": "application/json" },
+        timeout: 10000,
+      });
+
+      const successMsg =
+        res?.data?.message || "Password set successfully. You can now log in.";
+      showBreadcrumb(successMsg, "success");
 
       dispatch({ type: "RESET" });
-    } catch (err) {
-      console.error(err);
-      dispatch({
-        type: "SET_ERROR",
-        payload:
-          typeof err === "string"
-            ? err
-            : "Failed to set password. Please try again later.",
-      });
+
+      if (typeof window !== "undefined") {
+        setTimeout(() => {
+          window.location.href = "/auth/login";
+        }, 1200);
+      }
+    } catch (err: any) {
+      let msg = "Failed to complete registration. Please try again.";
+      if (axios.isAxiosError(err)) {
+        if (err.response?.data) {
+          if (typeof err.response.data === "string") msg = err.response.data;
+          else if (err.response.data.message) msg = err.response.data.message;
+          else if (err.response.data.error) msg = err.response.data.error;
+        } else if (err.message) {
+          msg = err.message;
+        }
+      }
+      dispatch({ type: "SET_ERROR", payload: msg });
+      showBreadcrumb(msg, "error");
+      console.error("Complete register error:", err);
     } finally {
       dispatch({ type: "SET_LOADING", payload: false });
     }
@@ -100,7 +143,7 @@ export default function CompleteRegisterForm() {
     >
       <div className="complete-register-card-inner">
         <h2 id="complete-rf-heading" className="complete-register-title">
-          Set a new password
+          Complete your registration
         </h2>
 
         <form
@@ -120,25 +163,38 @@ export default function CompleteRegisterForm() {
           )}
 
           <label className="complete-register-field">
-            <span className="complete-register-label">New password</span>
+            <span className="complete-register-label">Email</span>
+            <input
+              className="complete-register-input"
+              type="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) =>
+                dispatch({ type: "SET_EMAIL", payload: e.target.value })
+              }
+              required
+              autoComplete="email"
+            />
+          </label>
 
+          <label className="complete-register-field">
+            <span className="complete-register-label">New password</span>
             <div className="password-wrapper">
               <input
                 className="complete-register-input password-input"
                 type={showPassword ? "text" : "password"}
-                placeholder="At least 8 characters"
+                placeholder="Enter new password"
                 value={password}
                 onChange={(e) =>
                   dispatch({ type: "SET_PASSWORD", payload: e.target.value })
                 }
                 required
-                autoComplete="new-password"
-                minLength={8}
+                minLength={2}
+                maxLength={128}
               />
               <button
                 type="button"
                 className="password-toggle"
-                aria-label={showPassword ? "Hide password" : "Show password"}
                 onClick={() => setShowPassword((s) => !s)}
               >
                 {showPassword ? "Hide" : "Show"}
@@ -148,28 +204,22 @@ export default function CompleteRegisterForm() {
 
           <label className="complete-register-field">
             <span className="complete-register-label">Confirm password</span>
-
             <div className="password-wrapper">
               <input
                 className="complete-register-input password-input"
                 type={showConfirm ? "text" : "password"}
-                placeholder="Repeat your password"
+                placeholder="Confirm password"
                 value={confirmPassword}
                 onChange={(e) =>
                   dispatch({ type: "SET_CONFIRM", payload: e.target.value })
                 }
                 required
-                autoComplete="new-password"
-                minLength={8}
+                minLength={2}
+                maxLength={128}
               />
               <button
                 type="button"
                 className="password-toggle"
-                aria-label={
-                  showConfirm
-                    ? "Hide confirm password"
-                    : "Show confirm password"
-                }
                 onClick={() => setShowConfirm((s) => !s)}
               >
                 {showConfirm ? "Hide" : "Show"}
