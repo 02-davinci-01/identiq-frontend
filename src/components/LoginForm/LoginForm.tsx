@@ -3,10 +3,10 @@
 
 import React, { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import Modal from "@/components/LModal/LModal";
 import "./loginForm.css";
 import axios from "axios";
 import { useRouter } from "next/navigation";
+import LModal from "@/components/LModal/LModal"; // ✅ Only LModal imported now
 
 export default function LoginForm() {
   const router = useRouter();
@@ -20,7 +20,8 @@ export default function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
 
   // backend base from env (falls back to localhost:3001)
-  const BACKEND_BASE = (process.env.NEXT_PUBLIC_API_URL as string) || "https://localhost:3001";
+  const BACKEND_BASE =
+    (process.env.NEXT_PUBLIC_API_URL as string) || "https://localhost:3001";
 
   // helper: persist token — per your request we ALWAYS store the canonical token in localStorage
   function persistTokenLocal(key: string, token: string) {
@@ -53,12 +54,9 @@ export default function LoginForm() {
         {
           headers: { "Content-Type": "application/json" },
           validateStatus: (s) => s >= 200 && s < 500,
-          // withCredentials: true, // enable only if your server uses cookie auth
         }
       );
 
-      // DEBUG: inspect the full response shape in console (remove in prod)
-      // eslint-disable-next-line no-console
       console.log("LOGIN RESPONSE", { status: res.status, data: res.data });
 
       if (res.status < 200 || res.status >= 300) {
@@ -68,7 +66,6 @@ export default function LoginForm() {
         return;
       }
 
-      // token is located at res.data.data.accessToken in your backend
       const token =
         res?.data?.accessToken ||
         res?.data?.data?.accessToken ||
@@ -78,31 +75,22 @@ export default function LoginForm() {
         null;
 
       if (token) {
-        // 1) persist canonical token to localStorage (guarantees dashboard sees it)
         persistTokenLocal("access_token", token);
 
-        // 2) also set a fallback key 'token' (some older code checks this)
         try {
           localStorage.setItem("token", token);
         } catch (e) {}
 
-        // 3) set global axios header so modules that use global axios get Authorization too
         try {
           // @ts-ignore
           axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-        } catch (e) {
-          // ignore
-        }
+        } catch (e) {}
 
-        // 4) clear sensitive field
         setPassword("");
-
-        // 5) redirect to dashboard
         router.push("/dashboard");
         return;
       }
 
-      // If no token in body but 200/201, assume cookie-based auth (less likely for your case)
       if (res.status === 200 || res.status === 201) {
         axios.defaults.withCredentials = true;
         router.push("/dashboard");
@@ -111,7 +99,6 @@ export default function LoginForm() {
 
       setError("Login succeeded but token missing from response.");
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error("Login error:", err);
       setError("Something went wrong — please try again.");
     } finally {
@@ -222,41 +209,10 @@ export default function LoginForm() {
       </div>
 
       {/* Forgot password modal */}
-      <Modal
+      <LModal
         open={showForgotModal}
         onClose={() => setShowForgotModal(false)}
-        title="Reset password"
-      >
-        <div style={{ padding: "8px 0" }}>
-          <p style={{ marginBottom: 12 }}>
-            `Enter your email and we will send a reset link.`
-          </p>
-          <input
-            className="login-input"
-            type="email"
-            inputMode="email"
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            style={{ width: "100%", marginBottom: 12 }}
-          />
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <button className="btn" onClick={() => setShowForgotModal(false)}>
-              Cancel
-            </button>
-            <button
-              className="btn btn-accent"
-              onClick={() => {
-                // TODO: wire forgot password API
-                alert("Reset link sent (demo).");
-                setShowForgotModal(false);
-              }}
-            >
-              Send
-            </button>
-          </div>
-        </div>
-      </Modal>
+      />
     </>
   );
 }
