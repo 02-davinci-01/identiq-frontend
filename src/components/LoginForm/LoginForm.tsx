@@ -13,7 +13,6 @@ export default function LoginForm() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
@@ -168,15 +167,7 @@ export default function LoginForm() {
             </label>
 
             <div className="login-row login-between">
-              <label className="login-checkbox">
-                <input
-                  type="checkbox"
-                  checked={remember}
-                  onChange={(e) => setRemember(e.target.checked)}
-                />
-                <span>Remember me</span>
-              </label>
-
+              
               <button
                 type="button"
                 className="login-link-btn"

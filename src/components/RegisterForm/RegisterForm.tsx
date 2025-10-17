@@ -160,21 +160,7 @@ export default function RegisterForm() {
 
           {/* password removed here: password is set on complete-register after email verification */}
 
-          <div className="register-row register-between">
-            <label className="register-checkbox">
-              <input
-                type="checkbox"
-                checked={remember}
-                onChange={() => dispatch({ type: "TOGGLE_REMEMBER" })}
-              />
-              <span>Remember me</span>
-            </label>
-
-            <a className="register-link" href="/auth/forgot">
-              Forgot password?
-            </a>
-          </div>
-
+          
           <button
             className="btn btn-accent register-submit"
             type="submit"
