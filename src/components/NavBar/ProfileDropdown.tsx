@@ -6,6 +6,26 @@ import {
   ChangePasswordModal,
   DeleteAccountModal,
 } from "@/components/Modal/Modal";
+import axios, { AxiosInstance } from "axios";
+
+const BACKEND_BASE = (process.env.NEXT_PUBLIC_API_URL as string) || "https://localhost:3001";
+const api: AxiosInstance = axios.create({
+  baseURL: BACKEND_BASE,
+  timeout: 10_000,
+  validateStatus: (s) => s >= 200 && s < 500,
+});
+
+function getToken() {
+  if (typeof window === "undefined") return null;
+  return (
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("accessToken") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("jwt") ||
+    localStorage.getItem("authToken") ||
+    null
+  );
+}
 
 export default function ProfileDropdown() {
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -14,6 +34,7 @@ export default function ProfileDropdown() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
 
+  const [origEmail, setOrigEmail] = useState(""); // to detect email changes
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,19 +56,31 @@ export default function ProfileDropdown() {
     return () => document.removeEventListener("click", handleClickOutside);
   }, []);
 
-  // fetch current user details (optional; replace with props/context if you already have user)
+  // fetch current user details
   useEffect(() => {
     async function fetchUser() {
+      setLoading(true);
       try {
-        const res = await fetch("/api/user/me");
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data?.data) {
-          setName(data.data.name || "");
-          setEmail(data.data.email || "");
+        const token = getToken();
+        const headers: Record<string, string> = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+
+        // GET /users/me (users controller)
+        const res = await api.get("/users/me", { headers });
+        if (!res || res.status >= 400) {
+          setLoading(false);
+          return;
         }
+        const data = res.data;
+        // support both { name, email } and { data: { name, email } }
+        const payload = data?.data ?? data;
+        setName(payload?.name || "");
+        setEmail(payload?.email || "");
+        setOrigEmail(payload?.email || "");
       } catch {
         // ignore - users can edit manually
+      } finally {
+        setLoading(false);
       }
     }
     fetchUser();
@@ -69,17 +102,33 @@ export default function ProfileDropdown() {
 
     setSaving(true);
     try {
-      const res = await fetch("/api/user/update", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), email: email.trim() }),
-      });
-      const json = await res.json();
-      if (!res.ok || json?.ok === false) {
-        setError(json?.error || "Failed to save changes");
+      const token = getToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      // 1) Update name via auth endpoint
+      const nameRes = await api.patch("/auth/name", { name: name.trim() }, { headers });
+      if (nameRes.status >= 400 || nameRes.data?.ok === false) {
+        setError(nameRes.data?.error || nameRes.data?.message || "Failed to update name");
+        setSaving(false);
         return;
       }
-      setSuccessMsg("Changes saved");
+
+      // 2) If email changed, initiate email change flow
+      if (email.trim() !== origEmail.trim()) {
+        const emailRes = await api.post("/auth/email", { newEmail: email.trim() }, { headers });
+        if (emailRes.status >= 400 || emailRes.data?.ok === false) {
+          setError(emailRes.data?.error || emailRes.data?.message || "Failed to initiate email change");
+          setSaving(false);
+          return;
+        }
+        // keep origEmail as previous email until user confirms via email
+        setSuccessMsg("Name updated. Verification sent to new email.");
+      } else {
+        setSuccessMsg("Changes saved");
+        setOrigEmail(email);
+      }
+
       setTimeout(() => setSuccessMsg(null), 2000);
     } catch {
       setError("Network error while saving changes");
@@ -121,6 +170,11 @@ export default function ProfileDropdown() {
             role="dialog"
             aria-label="Edit profile"
           >
+            {/* Breadcrumbs (minimal, non-invasive) */}
+            <div className={styles.breadcrumbs} aria-hidden>
+              Profile › Edit
+            </div>
+
             <form className={styles.form} onSubmit={handleSave}>
               <label className={styles.label}>
                 <span className={styles.labelText}>Name</span>

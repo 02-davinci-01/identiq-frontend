@@ -1,3 +1,4 @@
+// page.tsx (client) — drop-in replacement
 "use client";
 
 import React, { useLayoutEffect, useState, useEffect } from "react";
@@ -5,6 +6,8 @@ import ThemePreview from "@/components/Dashboard/ThemePreview";
 import Topbar from "@/components/Dashboard/Topbar";
 import styles from "./styles/dashboard.module.css";
 import TypewriterText from "@/components/TypewriterText";
+import axios, { AxiosInstance } from "axios";
+import { useRouter } from "next/navigation";
 
 type Theme = { id: string; label: string; img: string; color: string };
 const STORAGE_KEY = "dashboardTheme";
@@ -67,11 +70,26 @@ function applyThemeVars(baseHex: string) {
 }
 
 /* --------------------------------------------
+   Network: axios instance (uses env)
+-------------------------------------------- */
+const BACKEND_BASE = process.env.NEXT_PUBLIC_API_URL || "https://localhost:3001";
+
+const api: AxiosInstance = axios.create({
+  baseURL: BACKEND_BASE,
+  timeout: 10_000,
+  validateStatus: (s) => s >= 200 && s < 500, // we'll handle 401 explicitly
+});
+
+/* --------------------------------------------
    Main Component
 -------------------------------------------- */
 export default function DashboardPage() {
+  const router = useRouter();
+
   const [selectedThemeId, setSelectedThemeId] = useState<string | null>(null);
   const [totalUsers, setTotalUsers] = useState<number | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
 
   /* Apply theme BEFORE paint using useLayoutEffect */
   useLayoutEffect(() => {
@@ -103,21 +121,121 @@ export default function DashboardPage() {
     } catch {}
   }, [selectedThemeId]);
 
-  /* Fetch user count (unrelated logic) */
+  /* Attach request interceptor to read fresh token per request */
   useEffect(() => {
-    async function fetchCount() {
+    const interceptor = api.interceptors.request.use((config) => {
       try {
-        const res = await fetch(`/api/users/count`, { cache: "no-store" });
-        if (res.ok) {
-          const data = await res.json();
-          setTotalUsers(data.count || 145);
-        } else setTotalUsers(145);
-      } catch {
-        setTotalUsers(145);
+        const token =
+          typeof window !== "undefined"
+            ? localStorage.getItem("access_token") || // login writes this
+              localStorage.getItem("accessToken") ||
+              localStorage.getItem("token") ||
+              localStorage.getItem("jwt") ||
+              localStorage.getItem("authToken")
+            : null;
+
+        config.headers = config.headers ?? {};
+        if (token) config.headers["Authorization"] = `Bearer ${token}`;
+        else delete config.headers["Authorization"];
+
+        // cache bust
+        config.params = { ...config.params, _t: Date.now() };
+      } catch (e) {
+        // ignore localStorage errors
+      }
+      return config;
+    });
+
+    return () => {
+      api.interceptors.request.eject(interceptor);
+    };
+  }, []);
+
+  /* Fetch user name and user count on every mount (fresh) */
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadFreshData() {
+      setLoading(true);
+
+      // quick check for token presence (client-side)
+      const token =
+        typeof window !== "undefined"
+          ? localStorage.getItem("access_token") ||
+            localStorage.getItem("accessToken") ||
+            localStorage.getItem("token") ||
+            localStorage.getItem("jwt") ||
+            localStorage.getItem("authToken")
+          : null;
+
+      if (!token) {
+        try {
+          localStorage.removeItem("access_token");
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("token");
+          localStorage.removeItem("jwt");
+          localStorage.removeItem("authToken");
+        } catch (e) {}
+        router.push("/auth/login");
+        return;
+      }
+
+      try {
+        const [meRes, countRes] = await Promise.all([api.get("/users/me"), api.get("/users/count")]);
+
+        // handle unauthorized
+        if (meRes.status === 401 || countRes.status === 401) {
+          try {
+            localStorage.removeItem("access_token");
+            localStorage.removeItem("accessToken");
+            localStorage.removeItem("token");
+            localStorage.removeItem("jwt");
+            localStorage.removeItem("authToken");
+          } catch (e) {}
+          if (mounted) router.push("/auth/login");
+          return;
+        }
+
+        // process me response
+        if (meRes.status >= 200 && meRes.status < 300) {
+          const meData = meRes.data; // expect { name, email }
+          if (mounted) setUserName(meData?.name ?? null);
+        } else {
+          if (mounted) setUserName(null);
+        }
+
+        // process count response
+        if (countRes.status >= 200 && countRes.status < 300) {
+          const countData = countRes.data;
+          const parsed =
+            typeof countData === "number"
+              ? countData
+              : Number(countData?.count ?? countData ?? 0);
+          if (mounted) setTotalUsers(Number.isFinite(parsed) ? parsed : 0);
+        } else {
+          if (mounted) setTotalUsers(null);
+        }
+      } catch (err) {
+        // network/unexpected -> clear token and redirect
+        try {
+          localStorage.removeItem("access_token");
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("token");
+          localStorage.removeItem("jwt");
+          localStorage.removeItem("authToken");
+        } catch (e) {}
+        if (mounted) router.push("/auth/login");
+      } finally {
+        if (mounted) setLoading(false);
       }
     }
-    fetchCount();
-  }, []);
+
+    loadFreshData();
+
+    return () => {
+      mounted = false;
+    };
+  }, [router]);
 
   /* Handle theme change */
   function handleThemeSelect(id: string) {
@@ -131,7 +249,7 @@ export default function DashboardPage() {
     }
   }
 
-  const name = "Vedant";
+  const name = userName ?? "Vedant";
   const today = new Date().toLocaleDateString(undefined, {
     weekday: "long",
     day: "numeric",
@@ -146,7 +264,12 @@ export default function DashboardPage() {
           <div className={styles.welcome}>
             <TypewriterText text={`welcome ${name}`} speed={80} />
           </div>
-          <div className={styles.count}>{totalUsers ?? "--"}</div>
+
+          <div className={styles.count} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+            <div>{totalUsers ?? "--"}</div>
+            <div className={styles.countLabel}>total user</div>
+          </div>
+
           <div className={styles.date}>{today}</div>
         </div>
 

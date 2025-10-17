@@ -5,8 +5,12 @@ import React, { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import Modal from "@/components/LModal/LModal";
 import "./loginForm.css";
+import axios from "axios";
+import { useRouter } from "next/navigation";
 
 export default function LoginForm() {
+  const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(false);
@@ -14,6 +18,23 @@ export default function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // backend base from env (falls back to localhost:3001)
+  const BACKEND_BASE = (process.env.NEXT_PUBLIC_API_URL as string) || "https://localhost:3001";
+
+  // helper: persist token — per your request we ALWAYS store the canonical token in localStorage
+  function persistTokenLocal(key: string, token: string) {
+    try {
+      localStorage.setItem(key, token); // ALWAYS store in localStorage
+    } catch (e) {
+      // fallback: sessionStorage (should be rare)
+      try {
+        sessionStorage.setItem(key, token);
+      } catch (e2) {
+        // ignore
+      }
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,20 +45,74 @@ export default function LoginForm() {
       return;
     }
 
+    setLoading(true);
     try {
-      setLoading(true);
+      const res = await axios.post(
+        `${BACKEND_BASE}/auth/login`,
+        { email: email.trim(), password },
+        {
+          headers: { "Content-Type": "application/json" },
+          validateStatus: (s) => s >= 200 && s < 500,
+          // withCredentials: true, // enable only if your server uses cookie auth
+        }
+      );
 
-      // TODO: replace this with your real auth API call
-      // Example:
-      // const res = await fetch('/api/auth/login', {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({email,password})});
-      // handle tokens/cookies and redirects
+      // DEBUG: inspect the full response shape in console (remove in prod)
+      // eslint-disable-next-line no-console
+      console.log("LOGIN RESPONSE", { status: res.status, data: res.data });
 
-      await new Promise((r) => setTimeout(r, 600)); // demo delay
-      setPassword("");
-      // On success redirect as necessary: use next/navigation router.push('/dashboard')
-      alert("Demo login succeeded — replace with real auth.");
+      if (res.status < 200 || res.status >= 300) {
+        const body = res.data ?? {};
+        const msg = body?.message || body?.error || "Invalid credentials";
+        setError(msg);
+        return;
+      }
+
+      // token is located at res.data.data.accessToken in your backend
+      const token =
+        res?.data?.accessToken ||
+        res?.data?.data?.accessToken ||
+        res?.data?.token ||
+        res?.data?.data?.token ||
+        res?.data?.auth?.token ||
+        null;
+
+      if (token) {
+        // 1) persist canonical token to localStorage (guarantees dashboard sees it)
+        persistTokenLocal("access_token", token);
+
+        // 2) also set a fallback key 'token' (some older code checks this)
+        try {
+          localStorage.setItem("token", token);
+        } catch (e) {}
+
+        // 3) set global axios header so modules that use global axios get Authorization too
+        try {
+          // @ts-ignore
+          axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+        } catch (e) {
+          // ignore
+        }
+
+        // 4) clear sensitive field
+        setPassword("");
+
+        // 5) redirect to dashboard
+        router.push("/dashboard");
+        return;
+      }
+
+      // If no token in body but 200/201, assume cookie-based auth (less likely for your case)
+      if (res.status === 200 || res.status === 201) {
+        axios.defaults.withCredentials = true;
+        router.push("/dashboard");
+        return;
+      }
+
+      setError("Login succeeded but token missing from response.");
     } catch (err) {
-      console.error(err);
+      // eslint-disable-next-line no-console
+      console.error("Login error:", err);
       setError("Something went wrong — please try again.");
     } finally {
       setLoading(false);
@@ -45,7 +120,6 @@ export default function LoginForm() {
   };
 
   return (
-    //im the toggle branch
     <>
       <div className="login-card" role="region" aria-labelledby="lf-heading">
         <div className="login-card-inner">
@@ -136,15 +210,6 @@ export default function LoginForm() {
             <div className="login-divider">
               <span>or</span>
             </div>
-
-            {/* <div className="login-socials">
-              <button type="button" className="btn btn-ghost">
-                Sign in with Google
-              </button>
-              <button type="button" className="btn btn-ghost">
-                Sign in with GitHub
-              </button>
-            </div> */}
 
             <p className="login-signup">
               New here?{" "}

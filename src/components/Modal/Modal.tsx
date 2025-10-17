@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, ReactNode } from "react";
 import ReactDOM from "react-dom";
 import styles from "./modal.module.css";
+import axios, { AxiosInstance } from "axios";
 
 type GenericModalProps = {
   open: boolean;
@@ -13,6 +14,31 @@ type GenericModalProps = {
   hideClose?: boolean;
   ariaLabel?: string;
 };
+
+/**
+ * Helper: backend base from env
+ */
+const BACKEND_BASE = (process.env.NEXT_PUBLIC_API_URL as string) || "https://localhost:3001";
+const api: AxiosInstance = axios.create({
+  baseURL: BACKEND_BASE,
+  timeout: 10_000,
+  validateStatus: (s) => s >= 200 && s < 500,
+});
+
+/**
+ * Get fresh token from localStorage (reads access_token first)
+ */
+function getToken() {
+  if (typeof window === "undefined") return null;
+  return (
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("accessToken") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("jwt") ||
+    localStorage.getItem("authToken") ||
+    null
+  );
+}
 
 /**
  * GenericModal
@@ -101,10 +127,7 @@ export function GenericModal({
 }
 
 /* ---------------------------
-  Specific modal UIs that use GenericModal
-   - ChangePasswordModal
-   - DeleteAccountModal
-   Both accept open + onClose and handle their own API calls.
+  ChangePasswordModal + DeleteAccountModal
 ----------------------------*/
 
 type ChangePasswordProps = {
@@ -152,22 +175,32 @@ export function ChangePasswordModal({ open, onClose }: ChangePasswordProps) {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/user/change-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentPassword: current, newPassword: next }),
-      });
-      const json = await res.json();
-      if (!res.ok || json?.ok === false) {
-        setError(json?.error || "Failed to change password.");
+      const token = getToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      // --- Send payload matching ChangePasswordDto: { password: string }
+      // Backend will identify the user from JWT (so we only send the new password).
+      const res = await api.patch(
+        "/auth/password",
+        { password: next }, // <- changed to match DTO
+        { headers }
+      );
+
+      const json = res.data;
+      // accept any 2xx as success; prefer explicit ok/message when present
+      if (res.status >= 200 && res.status < 300 && (json?.ok === undefined || json?.ok === true)) {
+        setSuccess(json?.message ?? "Password changed successfully.");
+        setTimeout(() => {
+          setSuccess(null);
+          onClose();
+        }, 1100);
         return;
       }
-      setSuccess("Password changed successfully.");
-      setTimeout(() => {
-        setSuccess(null);
-        onClose();
-      }, 1100);
-    } catch {
+
+      // otherwise show error message returned by server or a generic one
+      setError(json?.error || json?.message || "Failed to change password.");
+    } catch (err) {
       setError("Network error changing password.");
     } finally {
       setLoading(false);
@@ -269,14 +302,20 @@ export function DeleteAccountModal({ open, onClose }: DeleteAccountProps) {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch("/api/user/delete", { method: "DELETE" });
-      const json = await res.json();
-      if (!res.ok || json?.ok === false) {
-        setError(json?.error || "Failed to delete account.");
+      const token = getToken();
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      // Call auth delete endpoint
+      const res = await api.delete("/auth", { headers });
+      const json = res.data;
+      // treat any 2xx as success; accept { ok: true } or { message: '...' }
+      if (res.status >= 200 && res.status < 300 && (json?.ok === undefined || json?.ok === true)) {
+        // If deletion succeeded, redirect
+        window.location.href = "/";
         return;
       }
-      // If deletion succeeded, redirect
-      window.location.href = "/";
+      setError(json?.error || json?.message || "Failed to delete account.");
     } catch {
       setError("Network error during deletion.");
     } finally {
