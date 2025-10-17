@@ -31,7 +31,7 @@ export default function Topbar() {
     }
 
     try {
-      // call backend logout endpoint
+      // call backend logout endpoint (best-effort)
       await axios.post(
         logoutEndpoint,
         {},
@@ -40,8 +40,6 @@ export default function Topbar() {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
             "Content-Type": "application/json",
           },
-          // if your backend uses cookies for auth, set withCredentials: true
-          // withCredentials: true,
           validateStatus: (s) => s >= 200 && s < 500,
         }
       );
@@ -57,6 +55,10 @@ export default function Topbar() {
         localStorage.removeItem("jwt");
         localStorage.removeItem("authToken");
         localStorage.removeItem("jid");
+        // remove dashboard theme so UI doesn't reapply light on reload
+        try {
+          localStorage.removeItem("dashboardTheme");
+        } catch (err) {}
       } catch (err) {
         // ignore storage errors
       }
@@ -72,6 +74,23 @@ export default function Topbar() {
         delete axios.defaults.headers.common["Authorization"];
         axios.defaults.withCredentials = false;
       } catch (err) {}
+
+      // --- Apply PUBLIC black theme CSS variables on :root so public pages render black immediately
+      try {
+        const rootStyle = document?.documentElement?.style;
+        if (rootStyle) {
+          // Public black theme (explicit values)
+          rootStyle.setProperty("--accent", "#000000"); // main accent becomes black
+          rootStyle.setProperty("--accent-rgb", `0, 0, 0`);
+          rootStyle.setProperty("--accent-2", "#111111"); // slightly lighter for overlays
+          rootStyle.setProperty("--accent-foreground", "#ffffff"); // text on black should be white
+          rootStyle.setProperty("--header-bg", "#000000");
+          rootStyle.setProperty("--top-left-bg", "#000000");
+          rootStyle.setProperty("--top-left-bg-2", "#0a0a0a");
+        }
+      } catch (err) {
+        console.warn("Failed to set public black theme vars:", err);
+      }
 
       // redirect to login page
       router.push("/auth/login");

@@ -19,7 +19,7 @@ const THEMES: Theme[] = [
   { id: "dark", label: "Dark", img: "/themeChange.webp", color: "#000000" },
 ];
 
-/* Color helpers */
+/* Color helpers (unchanged) */
 function hexToRgb(hex: string) {
   const h = hex.replace("#", "");
   const bigint = parseInt(
@@ -90,6 +90,7 @@ export default function DashboardPage() {
   const [totalUsers, setTotalUsers] = useState<number | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [themeUpdating, setThemeUpdating] = useState<string | null>(null); // themeId being updated
 
   /* Apply theme BEFORE paint using useLayoutEffect */
   useLayoutEffect(() => {
@@ -151,7 +152,7 @@ export default function DashboardPage() {
     };
   }, []);
 
-  /* Fetch user name and user count on every mount (fresh) */
+  /* Fetch user name, user count and theme on every mount (fresh) */
   useEffect(() => {
     let mounted = true;
 
@@ -181,10 +182,15 @@ export default function DashboardPage() {
       }
 
       try {
-        const [meRes, countRes] = await Promise.all([api.get("/users/me"), api.get("/users/count")]);
+        // fetch me, count and theme in parallel
+        const [meRes, countRes, themeRes] = await Promise.all([
+          api.get("/users/me"),
+          api.get("/users/count"),
+          api.get("/themes/me"),
+        ]);
 
         // handle unauthorized
-        if (meRes.status === 401 || countRes.status === 401) {
+        if (meRes.status === 401 || countRes.status === 401 || themeRes.status === 401) {
           try {
             localStorage.removeItem("access_token");
             localStorage.removeItem("accessToken");
@@ -215,6 +221,26 @@ export default function DashboardPage() {
         } else {
           if (mounted) setTotalUsers(null);
         }
+
+        // process theme response: if success apply server color and set selectedThemeId
+        if (themeRes.status >= 200 && themeRes.status < 300) {
+          const themeData = themeRes.data;
+          // expect shape { email, themeId, label, img, colorHex } (or similar)
+          const serverColor = themeData?.colorHex ?? themeData?.color ?? null;
+          const serverThemeId = themeData?.themeId ?? themeData?.id ?? null;
+
+          if (serverColor) {
+            applyThemeVars(serverColor);
+          }
+          if (mounted && serverThemeId) {
+            setSelectedThemeId(serverThemeId);
+            try {
+              localStorage.setItem(STORAGE_KEY, serverThemeId);
+            } catch {}
+          }
+        } else {
+          // no persisted theme — keep client default
+        }
       } catch (err) {
         // network/unexpected -> clear token and redirect
         try {
@@ -237,15 +263,66 @@ export default function DashboardPage() {
     };
   }, [router]);
 
-  /* Handle theme change */
-  function handleThemeSelect(id: string) {
+  /* Handle theme change: apply, then PATCH server; on failure revert */
+  async function handleThemeSelect(id: string) {
     const theme = THEMES.find((t) => t.id === id);
-    if (theme) {
-      applyThemeVars(theme.color);
-      setSelectedThemeId(theme.id);
+    if (!theme) return;
+
+    const prevThemeId = selectedThemeId;
+    const prevColor = (() => {
       try {
-        localStorage.setItem(STORAGE_KEY, theme.id);
+        const stored = localStorage.getItem(STORAGE_KEY);
+        const found = THEMES.find((t) => t.id === stored);
+        return found?.color ?? null;
+      } catch {
+        return null;
+      }
+    })();
+
+    // optimistic apply
+    applyThemeVars(theme.color);
+    setSelectedThemeId(theme.id);
+    try {
+      localStorage.setItem(STORAGE_KEY, theme.id);
+    } catch {}
+
+    // mark updating (UI could map to a spinner if desired)
+    setThemeUpdating(id);
+
+    try {
+      // call PATCH /themes with the selected themeId
+      const res = await api.patch("/themes", { themeId: id });
+      if (res.status >= 200 && res.status < 300) {
+        // server returns canonical theme info: { ok:true, theme: { colorHex, themeId, ... } }
+        const returned = res.data;
+        const color = returned?.theme?.colorHex ?? returned?.colorHex ?? null;
+        const serverThemeId = returned?.theme?.themeId ?? returned?.themeId ?? id;
+
+        if (color) {
+          applyThemeVars(color);
+        }
+        setSelectedThemeId(serverThemeId);
+        try {
+          localStorage.setItem(STORAGE_KEY, serverThemeId);
+        } catch {}
+      } else {
+        // failed — revert
+        console.warn("Failed to update theme on server", res.status, res.data);
+        if (prevColor) applyThemeVars(prevColor);
+        setSelectedThemeId(prevThemeId);
+        try {
+          if (prevThemeId) localStorage.setItem(STORAGE_KEY, prevThemeId);
+        } catch {}
+      }
+    } catch (err) {
+      console.warn("Network error updating theme", err);
+      if (prevColor) applyThemeVars(prevColor);
+      setSelectedThemeId(prevThemeId);
+      try {
+        if (prevThemeId) localStorage.setItem(STORAGE_KEY, prevThemeId);
       } catch {}
+    } finally {
+      setThemeUpdating(null);
     }
   }
 
