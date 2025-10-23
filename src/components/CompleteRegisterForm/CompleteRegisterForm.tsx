@@ -6,7 +6,6 @@ import "./completeRegisterForm.css";
 import { showBreadcrumb } from "@/lib/breadcrumb";
 
 type State = {
-  email: string;
   password: string;
   confirmPassword: string;
   error: string | null;
@@ -14,7 +13,6 @@ type State = {
 };
 
 type Action =
-  | { type: "SET_EMAIL"; payload: string }
   | { type: "SET_PASSWORD"; payload: string }
   | { type: "SET_CONFIRM"; payload: string }
   | { type: "SET_ERROR"; payload: string | null }
@@ -22,7 +20,6 @@ type Action =
   | { type: "RESET" };
 
 const initialState: State = {
-  email: "",
   password: "",
   confirmPassword: "",
   error: null,
@@ -31,8 +28,6 @@ const initialState: State = {
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
-    case "SET_EMAIL":
-      return { ...state, email: action.payload };
     case "SET_PASSWORD":
       return { ...state, password: action.payload };
     case "SET_CONFIRM":
@@ -50,22 +45,23 @@ function reducer(state: State, action: Action): State {
 
 export default function CompleteRegisterForm() {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const { email, password, confirmPassword, error, loading } = state;
+  const { password, confirmPassword, error, loading } = state;
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  const getTokenFromLocation = (): string | null => {
+  const getTokenFromLocation = (): any | null => {
     if (typeof window === "undefined") return null;
     try {
       const params = new URLSearchParams(window.location.search);
-      return params.get("token");
+      const userEmail = params.get("email");
+      const userToken = params.get("token");
+      return { userEmail, userToken };
     } catch {
       return null;
     }
   };
 
   const validate = (): string | null => {
-    if (!email.trim()) return "Please enter your email.";
     if (!password) return "Please enter a new password.";
     if (password.length < 2 || password.length > 128)
       return "Password must be between 2 and 128 characters.";
@@ -89,14 +85,17 @@ export default function CompleteRegisterForm() {
       dispatch({ type: "SET_LOADING", payload: true });
 
       const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-      const token = getTokenFromLocation();
+      const { userToken, userEmail } = getTokenFromLocation();
 
       const url = `${base.replace(/\/$/, "")}/auth/complete-register${
-        token ? `?token=${encodeURIComponent(token)}` : ""
+        userToken && userEmail
+          ? `?token=${encodeURIComponent(userToken)}&email=${encodeURIComponent(
+              userEmail
+            )}`
+          : ""
       }`;
 
       const payload = {
-        email,
         password,
       };
 
@@ -161,21 +160,6 @@ export default function CompleteRegisterForm() {
               {error}
             </div>
           )}
-
-          <label className="complete-register-field">
-            <span className="complete-register-label">Email</span>
-            <input
-              className="complete-register-input"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) =>
-                dispatch({ type: "SET_EMAIL", payload: e.target.value })
-              }
-              required
-              autoComplete="email"
-            />
-          </label>
 
           <label className="complete-register-field">
             <span className="complete-register-label">New password</span>
