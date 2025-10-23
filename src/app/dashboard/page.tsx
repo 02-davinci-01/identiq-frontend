@@ -72,13 +72,67 @@ function applyThemeVars(baseHex: string) {
 /* --------------------------------------------
    Network: axios instance (uses env)
 -------------------------------------------- */
-const BACKEND_BASE = process.env.NEXT_PUBLIC_API_URL || "https://localhost:3001";
+const BACKEND_BASE =
+  process.env.NEXT_PUBLIC_API_URL || "https://localhost:3001";
 
 const api: AxiosInstance = axios.create({
   baseURL: BACKEND_BASE,
   timeout: 10_000,
   validateStatus: (s) => s >= 200 && s < 500, // we'll handle 401 explicitly
 });
+
+/* --------------------------------------------
+   Small spinner overlay component
+   - non-invasive, inline styles so no CSS edits required
+-------------------------------------------- */
+function SpinnerOverlay({ visible }: { visible: boolean }) {
+  if (!visible) return null;
+  return (
+    <div
+      aria-hidden={!visible}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(255, 255, 255, 0.5)",
+        backdropFilter: "blur(2px)",
+        zIndex: 2000,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        fontFamily: "inherit",
+        color: "#111",
+      }}
+    >
+      {/* minimalist spinner */}
+      <div
+        style={{
+          width: 36,
+          height: 36,
+          border: "2px solid rgba(0,0,0,0.1)",
+          borderTop: "2px solid #000",
+          borderRadius: "50%",
+          animation: "spin 0.8s linear infinite",
+        }}
+      />
+      <span
+        style={{ marginTop: 12, fontSize: "0.9rem", letterSpacing: "0.5px" }}
+      >
+        loading
+      </span>
+
+      {/* spinner keyframes */}
+      <style>
+        {`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}
+      </style>
+    </div>
+  );
+}
 
 /* --------------------------------------------
    Main Component
@@ -190,7 +244,11 @@ export default function DashboardPage() {
         ]);
 
         // handle unauthorized
-        if (meRes.status === 401 || countRes.status === 401 || themeRes.status === 401) {
+        if (
+          meRes.status === 401 ||
+          countRes.status === 401 ||
+          themeRes.status === 401
+        ) {
           try {
             localStorage.removeItem("access_token");
             localStorage.removeItem("accessToken");
@@ -296,7 +354,8 @@ export default function DashboardPage() {
         // server returns canonical theme info: { ok:true, theme: { colorHex, themeId, ... } }
         const returned = res.data;
         const color = returned?.theme?.colorHex ?? returned?.colorHex ?? null;
-        const serverThemeId = returned?.theme?.themeId ?? returned?.themeId ?? id;
+        const serverThemeId =
+          returned?.theme?.themeId ?? returned?.themeId ?? id;
 
         if (color) {
           applyThemeVars(color);
@@ -333,8 +392,17 @@ export default function DashboardPage() {
     month: "short",
   });
 
+  const currYear = new Date().toLocaleDateString(undefined, {
+    year: "numeric",
+  });
+
+  const userTotal = (totalUsers ?? 0) > 1 ? "total users" : "total user";
+
   return (
     <div className={styles.dmRoot}>
+      {/* Spinner overlay to avoid visual snap while loading data/theme */}
+      <SpinnerOverlay visible={loading} />
+
       <Topbar />
       <div className={styles.contentContainer}>
         <div className={styles.infoRow}>
@@ -342,12 +410,24 @@ export default function DashboardPage() {
             <TypewriterText text={`welcome ${name}`} speed={80} />
           </div>
 
-          <div className={styles.count} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+          <div
+            className={styles.count}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
             <div>{totalUsers ?? "--"}</div>
-            <div className={styles.countLabel}>total user</div>
+            <div className={styles.countLabel}>{userTotal}</div>
           </div>
 
-          <div className={styles.date}>{today}</div>
+          <div className={styles.date}>
+            {today}
+            <br></br>
+            {currYear}
+          </div>
         </div>
 
         <section className={styles.themesCard}>

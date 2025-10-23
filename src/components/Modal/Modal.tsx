@@ -4,6 +4,7 @@ import React, { useEffect, useRef, ReactNode } from "react";
 import ReactDOM from "react-dom";
 import styles from "./modal.module.css";
 import axios, { AxiosInstance } from "axios";
+import { Eye, EyeOff } from "lucide-react";
 
 type GenericModalProps = {
   open: boolean;
@@ -15,19 +16,14 @@ type GenericModalProps = {
   ariaLabel?: string;
 };
 
-/**
- * Helper: backend base from env
- */
-const BACKEND_BASE = (process.env.NEXT_PUBLIC_API_URL as string) || "https://localhost:3001";
+const BACKEND_BASE =
+  (process.env.NEXT_PUBLIC_API_URL as string) || "https://localhost:3001";
 const api: AxiosInstance = axios.create({
   baseURL: BACKEND_BASE,
   timeout: 10_000,
   validateStatus: (s) => s >= 200 && s < 500,
 });
 
-/**
- * Get fresh token from localStorage (reads access_token first)
- */
 function getToken() {
   if (typeof window === "undefined") return null;
   return (
@@ -40,12 +36,36 @@ function getToken() {
   );
 }
 
-/**
- * GenericModal
- * - Renders into document.body using portal
- * - Handles ESC to close and clicking backdrop to close
- * - Focuses first focusable element when opened
- */
+/** Clear text-like inputs, textareas and selects inside given container */
+function clearInputsIn(el: HTMLElement | null) {
+  if (!el) return;
+  const inputs = el.querySelectorAll<
+    HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+  >("input, textarea, select");
+  inputs.forEach((i) => {
+    if (i instanceof HTMLInputElement) {
+      const type = i.type?.toLowerCase();
+      if (
+        type === "text" ||
+        type === "email" ||
+        type === "tel" ||
+        type === "search" ||
+        type === "url" ||
+        type === "password"
+      ) {
+        i.value = "";
+        i.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    } else if (i instanceof HTMLTextAreaElement) {
+      i.value = "";
+      i.dispatchEvent(new Event("input", { bubbles: true }));
+    } else if (i instanceof HTMLSelectElement) {
+      i.selectedIndex = -1;
+      i.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  });
+}
+
 export function GenericModal({
   open,
   title,
@@ -57,19 +77,34 @@ export function GenericModal({
 }: GenericModalProps) {
   const modalRef = useRef<HTMLDivElement | null>(null);
 
+  function handleClose() {
+    try {
+      clearInputsIn(modalRef.current);
+    } catch {
+      // ignore
+    }
+    onClose();
+  }
+
   useEffect(() => {
     if (!open) return;
 
+    // When opening, also clear any leftover values inside modal DOM so fields always start empty.
+    try {
+      clearInputsIn(modalRef.current);
+    } catch {
+      /* ignore */
+    }
+
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") handleClose();
     }
     document.addEventListener("keydown", onKey);
 
-    // prevent body scroll while modal open
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
-    // focus the first focusable element inside the modal
+    // focus first focusable element
     requestAnimationFrame(() => {
       const el = modalRef.current;
       if (!el) return;
@@ -83,7 +118,7 @@ export function GenericModal({
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -92,8 +127,7 @@ export function GenericModal({
       className={styles.backdrop}
       role="presentation"
       onMouseDown={(e) => {
-        // backdrop click closes; avoid closing when clicking inside modal
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) handleClose();
       }}
     >
       <div
@@ -110,7 +144,7 @@ export function GenericModal({
             <button
               aria-label="Close"
               className={styles.closeBtn}
-              onClick={onClose}
+              onClick={handleClose}
             >
               ✕
             </button>
@@ -144,6 +178,10 @@ export function ChangePasswordModal({ open, onClose }: ChangePasswordProps) {
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState<string | null>(null);
 
+  const [showCurrent, setShowCurrent] = React.useState(false);
+  const [showNext, setShowNext] = React.useState(false);
+  const [showConfirm, setShowConfirm] = React.useState(false);
+
   useEffect(() => {
     if (!open) {
       setCurrent("");
@@ -152,6 +190,9 @@ export function ChangePasswordModal({ open, onClose }: ChangePasswordProps) {
       setError(null);
       setSuccess(null);
       setLoading(false);
+      setShowCurrent(false);
+      setShowNext(false);
+      setShowConfirm(false);
     }
   }, [open]);
 
@@ -176,20 +217,23 @@ export function ChangePasswordModal({ open, onClose }: ChangePasswordProps) {
     setLoading(true);
     try {
       const token = getToken();
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      // --- Send payload matching ChangePasswordDto: { password: string }
-      // Backend will identify the user from JWT (so we only send the new password).
       const res = await api.patch(
         "/auth/password",
-        { password: next }, // <- changed to match DTO
+        { oldPassword: current, password: next },
         { headers }
       );
 
       const json = res.data;
-      // accept any 2xx as success; prefer explicit ok/message when present
-      if (res.status >= 200 && res.status < 300 && (json?.ok === undefined || json?.ok === true)) {
+      if (
+        res.status >= 200 &&
+        res.status < 300 &&
+        (json?.ok === undefined || json?.ok === true)
+      ) {
         setSuccess(json?.message ?? "Password changed successfully.");
         setTimeout(() => {
           setSuccess(null);
@@ -198,7 +242,6 @@ export function ChangePasswordModal({ open, onClose }: ChangePasswordProps) {
         return;
       }
 
-      // otherwise show error message returned by server or a generic one
       setError(json?.error || json?.message || "Failed to change password.");
     } catch (err) {
       setError("Network error changing password.");
@@ -239,40 +282,74 @@ export function ChangePasswordModal({ open, onClose }: ChangePasswordProps) {
       <form onSubmit={handleSave} className={styles.formInner}>
         <label className={styles.field}>
           <div className={styles.fieldLabel}>Current password</div>
-          <input
-            type="password"
-            value={current}
-            onChange={(e) => setCurrent(e.target.value)}
-            className={styles.input}
-            autoComplete="current-password"
-            required
-          />
+          <div className={styles.inputWrap}>
+            <input
+              type={showCurrent ? "text" : "password"}
+              value={current}
+              onChange={(e) => setCurrent(e.target.value)}
+              className={styles.input}
+              autoComplete="current-password"
+              required
+            />
+            <button
+              type="button"
+              aria-label={
+                showCurrent ? "Hide current password" : "Show current password"
+              }
+              className={styles.passwordToggle}
+              onClick={() => setShowCurrent((s) => !s)}
+            >
+              {showCurrent ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
         </label>
 
         <label className={styles.field}>
           <div className={styles.fieldLabel}>New password</div>
-          <input
-            type="password"
-            value={next}
-            onChange={(e) => setNext(e.target.value)}
-            className={styles.input}
-            autoComplete="new-password"
-            required
-            minLength={8}
-          />
+          <div className={styles.inputWrap}>
+            <input
+              type={showNext ? "text" : "password"}
+              value={next}
+              onChange={(e) => setNext(e.target.value)}
+              className={styles.input}
+              autoComplete="new-password"
+              required
+              minLength={8}
+            />
+            <button
+              type="button"
+              aria-label={showNext ? "Hide new password" : "Show new password"}
+              className={styles.passwordToggle}
+              onClick={() => setShowNext((s) => !s)}
+            >
+              {showNext ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
         </label>
 
         <label className={styles.field}>
           <div className={styles.fieldLabel}>Confirm password</div>
-          <input
-            type="password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            className={styles.input}
-            autoComplete="new-password"
-            required
-            minLength={8}
-          />
+          <div className={styles.inputWrap}>
+            <input
+              type={showConfirm ? "text" : "password"}
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              className={styles.input}
+              autoComplete="new-password"
+              required
+              minLength={8}
+            />
+            <button
+              type="button"
+              aria-label={
+                showConfirm ? "Hide confirm password" : "Show confirm password"
+              }
+              className={styles.passwordToggle}
+              onClick={() => setShowConfirm((s) => !s)}
+            >
+              {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
         </label>
 
         {error && <div className={styles.error}>{error}</div>}
@@ -306,12 +383,13 @@ export function DeleteAccountModal({ open, onClose }: DeleteAccountProps) {
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      // Call auth delete endpoint
       const res = await api.delete("/auth", { headers });
       const json = res.data;
-      // treat any 2xx as success; accept { ok: true } or { message: '...' }
-      if (res.status >= 200 && res.status < 300 && (json?.ok === undefined || json?.ok === true)) {
-        // If deletion succeeded, redirect
+      if (
+        res.status >= 200 &&
+        res.status < 300 &&
+        (json?.ok === undefined || json?.ok === true)
+      ) {
         window.location.href = "/";
         return;
       }

@@ -8,7 +8,8 @@ import {
 } from "@/components/Modal/Modal";
 import axios, { AxiosInstance } from "axios";
 
-const BACKEND_BASE = (process.env.NEXT_PUBLIC_API_URL as string) || "https://localhost:3001";
+const BACKEND_BASE =
+  (process.env.NEXT_PUBLIC_API_URL as string) || "https://localhost:3001";
 const api: AxiosInstance = axios.create({
   baseURL: BACKEND_BASE,
   timeout: 10_000,
@@ -31,10 +32,12 @@ export default function ProfileDropdown() {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
 
+  // Controlled state for the inputs (we'll always clear these on open/close)
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
 
-  const [origEmail, setOrigEmail] = useState(""); // to detect email changes
+  // Keep origEmail for change-detection only; this does NOT populate the input fields.
+  const [origEmail, setOrigEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,17 +49,29 @@ export default function ProfileDropdown() {
   const isValidEmail = (e: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
 
-  // close dropdown when clicking outside
+  // Utility: close dropdown but ensure inputs & messages are cleared first
+  function closeDropdown() {
+    setName("");
+    setEmail("");
+    setError(null);
+    setSuccessMsg(null);
+    setOpen(false);
+  }
+
+  // close dropdown when clicking outside -> use closeDropdown so clearing runs
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (!rootRef.current) return;
-      if (!rootRef.current.contains(e.target as Node)) setOpen(false);
+      if (!rootRef.current.contains(e.target as Node)) {
+        closeDropdown();
+      }
     }
     document.addEventListener("click", handleClickOutside);
     return () => document.removeEventListener("click", handleClickOutside);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // we intentionally leave deps empty; closeDropdown uses stable setters
 
-  // fetch current user details
+  // fetch current user details (only to read original email for change flow)
   useEffect(() => {
     async function fetchUser() {
       setLoading(true);
@@ -72,11 +87,14 @@ export default function ProfileDropdown() {
           return;
         }
         const data = res.data;
-        // support both { name, email } and { data: { name, email } }
         const payload = data?.data ?? data;
-        setName(payload?.name || "");
-        setEmail(payload?.email || "");
+
+        // IMPORTANT: do NOT populate visible inputs here.
+        // Keep original email for change detection only.
         setOrigEmail(payload?.email || "");
+        // ensure visible inputs remain empty:
+        setName("");
+        setEmail("");
       } catch {
         // ignore - users can edit manually
       } finally {
@@ -103,22 +121,40 @@ export default function ProfileDropdown() {
     setSaving(true);
     try {
       const token = getToken();
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
       // 1) Update name via auth endpoint
-      const nameRes = await api.patch("/auth/name", { name: name.trim() }, { headers });
+      const nameRes = await api.patch(
+        "/auth/name",
+        { name: name.trim() },
+        { headers }
+      );
       if (nameRes.status >= 400 || nameRes.data?.ok === false) {
-        setError(nameRes.data?.error || nameRes.data?.message || "Failed to update name");
+        setError(
+          nameRes.data?.error ||
+            nameRes.data?.message ||
+            "Failed to update name"
+        );
         setSaving(false);
         return;
       }
 
       // 2) If email changed, initiate email change flow
       if (email.trim() !== origEmail.trim()) {
-        const emailRes = await api.post("/auth/email", { newEmail: email.trim() }, { headers });
+        const emailRes = await api.post(
+          "/auth/email",
+          { newEmail: email.trim() },
+          { headers }
+        );
         if (emailRes.status >= 400 || emailRes.data?.ok === false) {
-          setError(emailRes.data?.error || emailRes.data?.message || "Failed to initiate email change");
+          setError(
+            emailRes.data?.error ||
+              emailRes.data?.message ||
+              "Failed to initiate email change"
+          );
           setSaving(false);
           return;
         }
@@ -130,6 +166,11 @@ export default function ProfileDropdown() {
       }
 
       setTimeout(() => setSuccessMsg(null), 2000);
+
+      // After successful save, clear visible inputs and close dropdown.
+      setName("");
+      setEmail("");
+      setOpen(false);
     } catch {
       setError("Network error while saving changes");
     } finally {
@@ -137,14 +178,14 @@ export default function ProfileDropdown() {
     }
   }
 
-  // open modals instead of direct navigation/confirm
+  // open modals instead of direct navigation/confirm; ensure dropdown closes & clears
   function handleOpenChangePassword() {
-    setOpen(false);
+    closeDropdown();
     setOpenChangePassword(true);
   }
 
   function handleOpenDelete() {
-    setOpen(false);
+    closeDropdown();
     setOpenDeleteModal(true);
   }
 
@@ -153,7 +194,18 @@ export default function ProfileDropdown() {
       <div className={styles.wrapper} ref={rootRef}>
         <button
           className={styles.trigger}
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => {
+            if (open) {
+              closeDropdown();
+            } else {
+              // opening: ensure inputs are empty when the dropdown becomes visible
+              setName("");
+              setEmail("");
+              setError(null);
+              setSuccessMsg(null);
+              setOpen(true);
+            }
+          }}
           aria-expanded={open}
           aria-haspopup="true"
           type="button"
@@ -170,7 +222,6 @@ export default function ProfileDropdown() {
             role="dialog"
             aria-label="Edit profile"
           >
-            {/* Breadcrumbs (minimal, non-invasive) */}
             <div className={styles.breadcrumbs} aria-hidden>
               Profile › Edit
             </div>

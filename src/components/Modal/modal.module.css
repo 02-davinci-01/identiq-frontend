@@ -88,9 +88,17 @@
   color: rgba(0, 0, 0, 0.6);
   letter-spacing: 0.02em;
 }
+
+/* wrapper to allow icon overlay without changing input flow */
+.inputWrap {
+  position: relative;
+}
+
+/* input: leave space on right for the eye toggle so input size doesn't shrink */
 .input {
   height: 42px;
   padding: 8px 10px;
+  padding-right: 44px; /* reserve room for the eye button */
   border-radius: 8px;
   border: 1px solid rgba(0, 0, 0, 0.08);
   outline: none;
@@ -101,6 +109,37 @@
 .input:focus {
   box-shadow: 0 8px 20px rgba(var(--accent-rgb, 201, 106, 43), 0.08);
   border-color: rgba(var(--accent-rgb, 201, 106, 43), 0.8);
+}
+
+/* password toggle button styled to match theme and sit above input */
+.passwordToggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 30px;
+  width: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--panel, #fff);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  padding: 0;
+  color: rgba(0, 0, 0, 0.6);
+  transition: background 120ms ease, box-shadow 120ms ease, color 120ms ease;
+}
+.passwordToggle:hover {
+  background: rgba(0, 0, 0, 0.03);
+  color: rgba(0, 0, 0, 0.8);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+}
+.passwordToggle:active {
+  transform: translateY(-50%) scale(0.98);
+}
+.passwordToggle svg {
+  display: block;
 }
 
 /* footer */
@@ -188,7 +227,7 @@
   }
 }
 
-/* responsive */
+/* responsive tweaks */
 @media (max-width: 640px) {
   .modal {
     padding: 14px;
