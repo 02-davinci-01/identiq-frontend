@@ -1,12 +1,13 @@
-// page.tsx (client) — drop-in replacement
+// app/dashboard/page.tsx
 "use client";
 
-import React, { useLayoutEffect, useState, useEffect } from "react";
+import React, { useLayoutEffect, useEffect, useState } from "react";
 import ThemePreview from "@/components/Dashboard/ThemePreview";
 import Topbar from "@/components/Dashboard/Topbar";
 import styles from "./styles/dashboard.module.css";
 import TypewriterText from "@/components/TypewriterText";
-import axios, { AxiosInstance } from "axios";
+import { useQueries } from "@tanstack/react-query";
+import { api, getToken } from "@/lib/api";
 import { useRouter } from "next/navigation";
 
 type Theme = { id: string; label: string; img: string; color: string };
@@ -19,7 +20,6 @@ const THEMES: Theme[] = [
   { id: "dark", label: "Dark", img: "/themeChange.webp", color: "#000000" },
 ];
 
-/* Color helpers (unchanged) */
 function hexToRgb(hex: string) {
   const h = hex.replace("#", "");
   const bigint = parseInt(
@@ -69,22 +69,7 @@ function applyThemeVars(baseHex: string) {
   root.setProperty("--top-left-bg-2", adjustLightness(baseHex, 0.08));
 }
 
-/* --------------------------------------------
-   Network: axios instance (uses env)
--------------------------------------------- */
-const BACKEND_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "https://localhost:3001";
-
-const api: AxiosInstance = axios.create({
-  baseURL: BACKEND_BASE,
-  timeout: 10_000,
-  validateStatus: (s) => s >= 200 && s < 500, // we'll handle 401 explicitly
-});
-
-/* --------------------------------------------
-   Small spinner overlay component
-   - non-invasive, inline styles so no CSS edits required
--------------------------------------------- */
+/* SpinnerOverlay - minimal (thin black spinner + 'loading') */
 function SpinnerOverlay({ visible }: { visible: boolean }) {
   if (!visible) return null;
   return (
@@ -104,7 +89,6 @@ function SpinnerOverlay({ visible }: { visible: boolean }) {
         color: "#111",
       }}
     >
-      {/* minimalist spinner */}
       <div
         style={{
           width: 36,
@@ -120,8 +104,6 @@ function SpinnerOverlay({ visible }: { visible: boolean }) {
       >
         loading
       </span>
-
-      {/* spinner keyframes */}
       <style>
         {`
           @keyframes spin {
@@ -134,41 +116,85 @@ function SpinnerOverlay({ visible }: { visible: boolean }) {
   );
 }
 
-/* --------------------------------------------
-   Main Component
--------------------------------------------- */
+/* Small dev debug panel that shows query states (only when NODE_ENV !== 'production') */
+function DebugPanel({ data }: { data: Record<string, any> }) {
+  if (process.env.NODE_ENV === "production") return null;
+  return (
+    <aside
+      style={{
+        position: "fixed",
+        right: 12,
+        bottom: 12,
+        zIndex: 9999,
+        background: "rgba(0,0,0,0.7)",
+        color: "#fff",
+        padding: 10,
+        borderRadius: 8,
+        fontSize: 12,
+        lineHeight: 1.2,
+        maxWidth: 320,
+        boxShadow: "0 6px 18px rgba(0,0,0,0.2)",
+      }}
+    >
+      <div style={{ fontWeight: 700, marginBottom: 6 }}>
+        react-query (dashboard)
+      </div>
+      {Object.entries(data).map(([k, v]) => (
+        <div key={k} style={{ marginBottom: 6 }}>
+          <div style={{ fontSize: 11, opacity: 0.9 }}>{k}</div>
+          <div style={{ fontFamily: "monospace", fontSize: 11 }}>
+            L:{String(v.isLoading)} F:{String(v.isFetching)} S:
+            {String(v.isSuccess)} E:{String(v.isError)}
+          </div>
+          <div
+            style={{
+              fontFamily: "monospace",
+              fontSize: 11,
+              marginTop: 3,
+              opacity: 0.85,
+            }}
+          >
+            data:{" "}
+            {v.data
+              ? typeof v.data === "string"
+                ? v.data
+                : JSON.stringify(v.data).slice(0, 80) +
+                  (JSON.stringify(v.data).length > 80 ? "…" : "")
+              : "—"}
+          </div>
+        </div>
+      ))}
+    </aside>
+  );
+}
+
 export default function DashboardPage() {
   const router = useRouter();
 
   const [selectedThemeId, setSelectedThemeId] = useState<string | null>(null);
   const [totalUsers, setTotalUsers] = useState<number | null>(null);
-  const [userName, setUserName] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [themeUpdating, setThemeUpdating] = useState<string | null>(null); // themeId being updated
+  const [themeUpdating, setThemeUpdating] = useState<string | null>(null);
+
+  /* spinnerVisible: starts true (to prevent snap), hides after all queries settled */
+  const [spinnerVisible, setSpinnerVisible] = useState<boolean>(true);
 
   /* Apply theme BEFORE paint using useLayoutEffect */
   useLayoutEffect(() => {
-    // Try to get from localStorage
-    let storedId = null;
+    let storedId: string | null = null;
     try {
       storedId = localStorage.getItem(STORAGE_KEY);
     } catch {}
-
-    // If missing, initialize to light theme
     if (!storedId) {
       storedId = "light";
       try {
         localStorage.setItem(STORAGE_KEY, storedId);
       } catch {}
     }
-
-    // Find the matching theme and apply immediately
     const theme = THEMES.find((t) => t.id === storedId) ?? THEMES[1];
     applyThemeVars(theme.color);
     setSelectedThemeId(theme.id);
   }, []);
 
-  /* Keep localStorage synced with every selection */
   useEffect(() => {
     if (!selectedThemeId) return;
     try {
@@ -176,152 +202,174 @@ export default function DashboardPage() {
     } catch {}
   }, [selectedThemeId]);
 
-  /* Attach request interceptor to read fresh token per request */
   useEffect(() => {
     const interceptor = api.interceptors.request.use((config) => {
       try {
-        const token =
-          typeof window !== "undefined"
-            ? localStorage.getItem("access_token") || // login writes this
-              localStorage.getItem("accessToken") ||
-              localStorage.getItem("token") ||
-              localStorage.getItem("jwt") ||
-              localStorage.getItem("authToken")
-            : null;
-
+        const token = getToken();
         config.headers = config.headers ?? {};
         if (token) config.headers["Authorization"] = `Bearer ${token}`;
         else delete config.headers["Authorization"];
-
-        // cache bust
         config.params = { ...config.params, _t: Date.now() };
-      } catch (e) {
-        // ignore localStorage errors
-      }
+      } catch (e) {}
       return config;
     });
-
-    return () => {
-      api.interceptors.request.eject(interceptor);
-    };
+    return () => api.interceptors.request.eject(interceptor);
   }, []);
 
-  /* Fetch user name, user count and theme on every mount (fresh) */
+  /* Use react-query to fetch me, count and theme in parallel */
+  const results = useQueries({
+    queries: [
+      {
+        queryKey: ["me"],
+        queryFn: async () => {
+          const res = await api.get("/users/me", {
+            headers: {
+              Authorization: getToken() ? `Bearer ${getToken()}` : undefined,
+            },
+          });
+          return res.data?.data ?? res.data;
+        },
+        staleTime: 1000 * 30, // 30s
+      },
+      {
+        queryKey: ["users", "count"],
+        queryFn: async () => {
+          const res = await api.get("/users/count", {
+            headers: {
+              Authorization: getToken() ? `Bearer ${getToken()}` : undefined,
+            },
+          });
+          return res.data?.count ?? res.data;
+        },
+      },
+      {
+        queryKey: ["theme", "me"],
+        queryFn: async () => {
+          const res = await api.get("/themes/me", {
+            headers: {
+              Authorization: getToken() ? `Bearer ${getToken()}` : undefined,
+            },
+          });
+          return res.data ?? res.data?.data;
+        },
+      },
+    ],
+  });
+
+  const meQuery = results[0];
+  const countQuery = results[1];
+  const themeQuery = results[2];
+
+  // If no token, immediately clear and redirect
   useEffect(() => {
-    let mounted = true;
+    const token = getToken();
+    if (!token) {
+      try {
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("token");
+        localStorage.removeItem("jwt");
+        localStorage.removeItem("authToken");
+      } catch {}
+      router.push("/auth/login");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    async function loadFreshData() {
-      setLoading(true);
-
-      // quick check for token presence (client-side)
-      const token =
-        typeof window !== "undefined"
-          ? localStorage.getItem("access_token") ||
-            localStorage.getItem("accessToken") ||
-            localStorage.getItem("token") ||
-            localStorage.getItem("jwt") ||
-            localStorage.getItem("authToken")
-          : null;
-
-      if (!token) {
+  // handle auth failure from meQuery (redirect on 401)
+  useEffect(() => {
+    if (meQuery.isError) {
+      const errAny: any = (meQuery as any).error;
+      const status = errAny?.response?.status ?? errAny?.status ?? null;
+      if (status === 401) {
         try {
           localStorage.removeItem("access_token");
           localStorage.removeItem("accessToken");
           localStorage.removeItem("token");
           localStorage.removeItem("jwt");
           localStorage.removeItem("authToken");
-        } catch (e) {}
+        } catch {}
         router.push("/auth/login");
         return;
       }
+    }
+  }, [meQuery.isError, (meQuery as any).error, router]);
 
-      try {
-        // fetch me, count and theme in parallel
-        const [meRes, countRes, themeRes] = await Promise.all([
-          api.get("/users/me"),
-          api.get("/users/count"),
-          api.get("/themes/me"),
-        ]);
+  // when count query completes, sync local state
+  useEffect(() => {
+    if (countQuery.isSuccess) {
+      const parsed =
+        typeof countQuery.data === "number"
+          ? countQuery.data
+          : Number(countQuery.data ?? 0);
+      setTotalUsers(Number.isFinite(parsed) ? parsed : 0);
+    }
+  }, [countQuery.isSuccess, countQuery.data]);
 
-        // handle unauthorized
-        if (
-          meRes.status === 401 ||
-          countRes.status === 401 ||
-          themeRes.status === 401
-        ) {
-          try {
-            localStorage.removeItem("access_token");
-            localStorage.removeItem("accessToken");
-            localStorage.removeItem("token");
-            localStorage.removeItem("jwt");
-            localStorage.removeItem("authToken");
-          } catch (e) {}
-          if (mounted) router.push("/auth/login");
-          return;
-        }
-
-        // process me response
-        if (meRes.status >= 200 && meRes.status < 300) {
-          const meData = meRes.data; // expect { name, email }
-          if (mounted) setUserName(meData?.name ?? null);
-        } else {
-          if (mounted) setUserName(null);
-        }
-
-        // process count response
-        if (countRes.status >= 200 && countRes.status < 300) {
-          const countData = countRes.data;
-          const parsed =
-            typeof countData === "number"
-              ? countData
-              : Number(countData?.count ?? countData ?? 0);
-          if (mounted) setTotalUsers(Number.isFinite(parsed) ? parsed : 0);
-        } else {
-          if (mounted) setTotalUsers(null);
-        }
-
-        // process theme response: if success apply server color and set selectedThemeId
-        if (themeRes.status >= 200 && themeRes.status < 300) {
-          const themeData = themeRes.data;
-          // expect shape { email, themeId, label, img, colorHex } (or similar)
-          const serverColor = themeData?.colorHex ?? themeData?.color ?? null;
-          const serverThemeId = themeData?.themeId ?? themeData?.id ?? null;
-
-          if (serverColor) {
-            applyThemeVars(serverColor);
-          }
-          if (mounted && serverThemeId) {
-            setSelectedThemeId(serverThemeId);
-            try {
-              localStorage.setItem(STORAGE_KEY, serverThemeId);
-            } catch {}
-          }
-        } else {
-          // no persisted theme — keep client default
-        }
-      } catch (err) {
-        // network/unexpected -> clear token and redirect
+  // apply theme from server when available
+  useEffect(() => {
+    if (themeQuery.isSuccess && themeQuery.data) {
+      const serverColor =
+        themeQuery.data?.colorHex ?? themeQuery.data?.color ?? null;
+      const serverThemeId =
+        themeQuery.data?.themeId ?? themeQuery.data?.id ?? null;
+      if (serverColor) applyThemeVars(serverColor);
+      if (serverThemeId) {
+        setSelectedThemeId(serverThemeId);
         try {
-          localStorage.removeItem("access_token");
-          localStorage.removeItem("accessToken");
-          localStorage.removeItem("token");
-          localStorage.removeItem("jwt");
-          localStorage.removeItem("authToken");
-        } catch (e) {}
-        if (mounted) router.push("/auth/login");
-      } finally {
-        if (mounted) setLoading(false);
+          localStorage.setItem(STORAGE_KEY, serverThemeId);
+        } catch {}
       }
     }
+  }, [themeQuery.isSuccess, themeQuery.data]);
 
-    loadFreshData();
+  /* ---- consider a query settled when it is success OR error ---- */
+  const meSettled = meQuery.isSuccess || meQuery.isError;
+  const countSettled = countQuery.isSuccess || countQuery.isError;
+  const themeSettled = themeQuery.isSuccess || themeQuery.isError;
 
+  // overall loading: true until all queries have settled
+  const allSettled = meSettled && countSettled && themeSettled;
+
+  // hide spinner shortly after allSettled becomes true
+  useEffect(() => {
+    let tid: number | undefined;
+    if (allSettled) {
+      // delay a tiny bit so UX doesn't flicker
+      tid = window.setTimeout(() => setSpinnerVisible(false), 120);
+    } else {
+      setSpinnerVisible(true);
+    }
     return () => {
-      mounted = false;
+      if (tid) clearTimeout(tid);
     };
-  }, [router]);
+  }, [allSettled]);
 
-  /* Handle theme change: apply, then PATCH server; on failure revert */
+  /* Debug info object for the dev panel */
+  const debugInfo = {
+    me: {
+      isLoading: meQuery.isLoading,
+      isFetching: meQuery.isFetching,
+      isSuccess: meQuery.isSuccess,
+      isError: meQuery.isError,
+      data: meQuery.data,
+    },
+    count: {
+      isLoading: countQuery.isLoading,
+      isFetching: countQuery.isFetching,
+      isSuccess: countQuery.isSuccess,
+      isError: countQuery.isError,
+      data: countQuery.data,
+    },
+    theme: {
+      isLoading: themeQuery.isLoading,
+      isFetching: themeQuery.isFetching,
+      isSuccess: themeQuery.isSuccess,
+      isError: themeQuery.isError,
+      data: themeQuery.data,
+    },
+  };
+
   async function handleThemeSelect(id: string) {
     const theme = THEMES.find((t) => t.id === id);
     if (!theme) return;
@@ -337,36 +385,27 @@ export default function DashboardPage() {
       }
     })();
 
-    // optimistic apply
+    // optimistic
     applyThemeVars(theme.color);
     setSelectedThemeId(theme.id);
     try {
       localStorage.setItem(STORAGE_KEY, theme.id);
     } catch {}
 
-    // mark updating (UI could map to a spinner if desired)
     setThemeUpdating(id);
-
     try {
-      // call PATCH /themes with the selected themeId
       const res = await api.patch("/themes", { themeId: id });
       if (res.status >= 200 && res.status < 300) {
-        // server returns canonical theme info: { ok:true, theme: { colorHex, themeId, ... } }
         const returned = res.data;
         const color = returned?.theme?.colorHex ?? returned?.colorHex ?? null;
         const serverThemeId =
           returned?.theme?.themeId ?? returned?.themeId ?? id;
-
-        if (color) {
-          applyThemeVars(color);
-        }
+        if (color) applyThemeVars(color);
         setSelectedThemeId(serverThemeId);
         try {
           localStorage.setItem(STORAGE_KEY, serverThemeId);
         } catch {}
       } else {
-        // failed — revert
-        console.warn("Failed to update theme on server", res.status, res.data);
         if (prevColor) applyThemeVars(prevColor);
         setSelectedThemeId(prevThemeId);
         try {
@@ -374,7 +413,6 @@ export default function DashboardPage() {
         } catch {}
       }
     } catch (err) {
-      console.warn("Network error updating theme", err);
       if (prevColor) applyThemeVars(prevColor);
       setSelectedThemeId(prevThemeId);
       try {
@@ -385,7 +423,7 @@ export default function DashboardPage() {
     }
   }
 
-  const name = userName ?? "Vedant";
+  const name = meQuery.data?.name ?? "Vedant";
   const today = new Date().toLocaleDateString(undefined, {
     weekday: "long",
     day: "numeric",
@@ -400,8 +438,7 @@ export default function DashboardPage() {
 
   return (
     <div className={styles.dmRoot}>
-      {/* Spinner overlay to avoid visual snap while loading data/theme */}
-      <SpinnerOverlay visible={loading} />
+      <SpinnerOverlay visible={spinnerVisible} />
 
       <Topbar />
       <div className={styles.contentContainer}>
@@ -425,7 +462,7 @@ export default function DashboardPage() {
 
           <div className={styles.date}>
             {today}
-            <br></br>
+            <br />
             {currYear}
           </div>
         </div>
@@ -446,6 +483,8 @@ export default function DashboardPage() {
           </div>
         </section>
       </div>
+
+      <DebugPanel data={debugInfo} />
     </div>
   );
 }

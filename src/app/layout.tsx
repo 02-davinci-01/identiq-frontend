@@ -1,7 +1,12 @@
 // src/app/layout.tsx
+"use client";
+
 import "@/app/globals.css";
 import Header from "@/components/header";
 import { IBM_Plex_Mono, Josefin_Sans } from "next/font/google";
+import React from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
 const ibmPlexMono = IBM_Plex_Mono({
   subsets: ["latin"],
@@ -15,27 +20,41 @@ const josefinSans = Josefin_Sans({
   variable: "--font-josefin-sans",
 });
 
-export const metadata = {
-  title: "User Management",
-  description: "User Management System",
-};
-
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // create a client per session (keeps SSR-safe usage)
+  const [queryClient] = React.useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            retry: 1,
+            staleTime: 1000 * 60, // 1 minute
+            refetchOnWindowFocus: false,
+          },
+        },
+      })
+  );
+
   return (
     <html
       lang="en"
       className={`${ibmPlexMono.variable} ${josefinSans.variable}`}
     >
       <body className="app-root">
-        <Header />
-        <main className="main-container">{children}</main>
-        <footer className="site-footer">
-          © {new Date().getFullYear()} · User Management
-        </footer>
+        <QueryClientProvider client={queryClient}>
+          <Header />
+          <main className="main-container">{children}</main>
+          <footer className="site-footer">
+            © {new Date().getFullYear()} · User Management
+          </footer>
+          {process.env.NODE_ENV !== "production" && (
+            <ReactQueryDevtools initialIsOpen={false} />
+          )}
+        </QueryClientProvider>
       </body>
     </html>
   );

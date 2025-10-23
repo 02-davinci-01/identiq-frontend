@@ -1,55 +1,40 @@
+// src/components/NavBar/ProfileDropdown.tsx
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { JSX, useEffect, useRef, useState } from "react";
 import styles from "./profileDropdown.module.css";
 import {
   ChangePasswordModal,
   DeleteAccountModal,
 } from "@/components/Modal/Modal";
-import axios, { AxiosInstance } from "axios";
+import { api, getToken } from "@/lib/api";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-const BACKEND_BASE =
-  (process.env.NEXT_PUBLIC_API_URL as string) || "https://localhost:3001";
-const api: AxiosInstance = axios.create({
-  baseURL: BACKEND_BASE,
-  timeout: 10_000,
-  validateStatus: (s) => s >= 200 && s < 500,
-});
+type ServerResp = { status: number; data: any };
 
-function getToken() {
-  if (typeof window === "undefined") return null;
-  return (
-    localStorage.getItem("access_token") ||
-    localStorage.getItem("accessToken") ||
-    localStorage.getItem("token") ||
-    localStorage.getItem("jwt") ||
-    localStorage.getItem("authToken") ||
-    null
-  );
-}
-
-export default function ProfileDropdown() {
+/**
+ * ProfileDropdown - fully typed
+ */
+export default function ProfileDropdown(): JSX.Element {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
 
-  // Controlled state for the inputs (we'll always clear these on open/close)
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-
-  // Keep origEmail for change-detection only; this does NOT populate the input fields.
-  const [origEmail, setOrigEmail] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [name, setName] = useState<string>("");
+  const [email, setEmail] = useState<string>("");
+  const [origEmail, setOrigEmail] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
+  const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const [openChangePassword, setOpenChangePassword] = useState(false);
   const [openDeleteModal, setOpenDeleteModal] = useState(false);
 
+  const queryClient = useQueryClient();
+
   const isValidEmail = (e: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
 
-  // Utility: close dropdown but ensure inputs & messages are cleared first
   function closeDropdown() {
     setName("");
     setEmail("");
@@ -58,7 +43,6 @@ export default function ProfileDropdown() {
     setOpen(false);
   }
 
-  // close dropdown when clicking outside -> use closeDropdown so clearing runs
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (!rootRef.current) return;
@@ -68,10 +52,9 @@ export default function ProfileDropdown() {
     }
     document.addEventListener("click", handleClickOutside);
     return () => document.removeEventListener("click", handleClickOutside);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // we intentionally leave deps empty; closeDropdown uses stable setters
+  }, []);
 
-  // fetch current user details (only to read original email for change flow)
+  // initial fetch to read original email
   useEffect(() => {
     async function fetchUser() {
       setLoading(true);
@@ -80,23 +63,18 @@ export default function ProfileDropdown() {
         const headers: Record<string, string> = {};
         if (token) headers["Authorization"] = `Bearer ${token}`;
 
-        // GET /users/me (users controller)
         const res = await api.get("/users/me", { headers });
         if (!res || res.status >= 400) {
           setLoading(false);
           return;
         }
-        const data = res.data;
-        const payload = data?.data ?? data;
-
-        // IMPORTANT: do NOT populate visible inputs here.
-        // Keep original email for change detection only.
+        const payload = res.data?.data ?? res.data;
         setOrigEmail(payload?.email || "");
-        // ensure visible inputs remain empty:
+        // keep inputs empty per previous behavior
         setName("");
         setEmail("");
       } catch {
-        // ignore - users can edit manually
+        // ignore
       } finally {
         setLoading(false);
       }
@@ -104,46 +82,96 @@ export default function ProfileDropdown() {
     fetchUser();
   }, []);
 
+  // useMutation: pass an options object with mutationFn to avoid TS overload ambiguity
+  const nameMutation = useMutation<
+    ServerResp,
+    unknown,
+    string,
+    { previous?: any }
+  >({
+    mutationFn: async (newName: string) => {
+      const token = getToken();
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await api.patch("/auth/name", { name: newName }, { headers });
+      return { status: res.status, data: res.data };
+    },
+    onMutate: async (newName: string) => {
+      await queryClient.cancelQueries({ queryKey: ["me"] });
+      const previous = queryClient.getQueryData<any>(["me"]);
+      queryClient.setQueryData(["me"], (old: any) => ({
+        ...(old ?? {}),
+        name: newName,
+      }));
+      return { previous };
+    },
+    onError: (err: unknown, newName: string, context?: { previous?: any }) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["me"], context.previous);
+      }
+    },
+    onSuccess: (res: ServerResp, newName: string) => {
+      if (res?.status >= 200 && res?.status < 300) {
+        const returned = res?.data;
+        const serverName = returned?.name ?? returned?.data?.name ?? newName;
+        queryClient.setQueryData(["me"], (old: any) => ({
+          ...(old ?? {}),
+          name: serverName,
+        }));
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["me"] });
+    },
+  });
+
   async function handleSave(e?: React.FormEvent) {
     if (e) e.preventDefault();
     setError(null);
     setSuccessMsg(null);
 
+    // basic name validation
     if (!name.trim()) {
       setError("Name cannot be empty");
       return;
     }
-    if (!isValidEmail(email)) {
+
+    const emailProvided = email.trim().length > 0;
+
+    // only validate email if the user typed something into the email field
+    if (emailProvided && !isValidEmail(email)) {
       setError("Please enter a valid email");
       return;
     }
 
     setSaving(true);
     try {
-      const token = getToken();
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-
-      // 1) Update name via auth endpoint
-      const nameRes = await api.patch(
-        "/auth/name",
-        { name: name.trim() },
-        { headers }
-      );
-      if (nameRes.status >= 400 || nameRes.data?.ok === false) {
+      // 1) Update name via mutation (mutateAsync returns ServerResp)
+      const mutateResult = await nameMutation.mutateAsync(name.trim());
+      if (
+        !mutateResult ||
+        mutateResult.status >= 400 ||
+        mutateResult.data?.ok === false
+      ) {
         setError(
-          nameRes.data?.error ||
-            nameRes.data?.message ||
+          mutateResult?.data?.error ||
+            mutateResult?.data?.message ||
             "Failed to update name"
         );
         setSaving(false);
         return;
       }
 
-      // 2) If email changed, initiate email change flow
-      if (email.trim() !== origEmail.trim()) {
+      // 2) Only attempt email-change if the user provided a new email and it differs from original
+      if (emailProvided && email.trim() !== origEmail.trim()) {
+        const token = getToken();
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+
         const emailRes = await api.post(
           "/auth/email",
           { newEmail: email.trim() },
@@ -158,16 +186,14 @@ export default function ProfileDropdown() {
           setSaving(false);
           return;
         }
-        // keep origEmail as previous email until user confirms via email
         setSuccessMsg("Name updated. Verification sent to new email.");
+        setOrigEmail(email); // update baseline to new email
       } else {
         setSuccessMsg("Changes saved");
-        setOrigEmail(email);
+        // if user didn't provide a new email, keep origEmail unchanged
       }
 
       setTimeout(() => setSuccessMsg(null), 2000);
-
-      // After successful save, clear visible inputs and close dropdown.
       setName("");
       setEmail("");
       setOpen(false);
@@ -178,7 +204,6 @@ export default function ProfileDropdown() {
     }
   }
 
-  // open modals instead of direct navigation/confirm; ensure dropdown closes & clears
   function handleOpenChangePassword() {
     closeDropdown();
     setOpenChangePassword(true);
@@ -198,7 +223,6 @@ export default function ProfileDropdown() {
             if (open) {
               closeDropdown();
             } else {
-              // opening: ensure inputs are empty when the dropdown becomes visible
               setName("");
               setEmail("");
               setError(null);
@@ -249,6 +273,7 @@ export default function ProfileDropdown() {
                   disabled={saving || loading}
                   name="email"
                   autoComplete="email"
+                  placeholder={origEmail || "leave blank to keep current email"}
                 />
               </label>
 
@@ -299,7 +324,6 @@ export default function ProfileDropdown() {
         )}
       </div>
 
-      {/* Modals placed at root so they overlay everything */}
       <ChangePasswordModal
         open={openChangePassword}
         onClose={() => setOpenChangePassword(false)}
