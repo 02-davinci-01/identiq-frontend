@@ -11,7 +11,7 @@ export default function ForgotPasswordPage() {
         <h1 id="forgot-hero" className="typewriter">
           Lost?<span className="cursor">|</span>
         </h1>
-        <p>don't worry - we got it.</p>
+        <p>don&apos;t worry - we got it.</p>
       </section>
 
       <div

@@ -84,7 +84,9 @@ api.interceptors.request.use((config) => {
     config.headers = config.headers ?? {};
     if (token) config.headers["Authorization"] = `Bearer ${token}`;
     else delete config.headers["Authorization"];
-  } catch (e) {}
+  } catch {
+    // ignore localStorage errors
+  }
   return config;
 });
 
@@ -144,7 +146,8 @@ function getCurrentUserIdentifiers() {
         if (!email && raw.includes("@")) email = raw;
         else if (!id) id = raw;
       }
-    } catch (e) {
+    } catch {
+      // ignore parse errors
       continue;
     }
   }
@@ -202,7 +205,9 @@ export default function UsersPage() {
       };
       const color = mapping[storedId] ?? mapping["light"];
       applyThemeVars(color);
-    } catch (e) {}
+    } catch {
+      // ignore
+    }
   }, []);
 
   /* ---------- fetch page function ---------- */
@@ -221,10 +226,13 @@ export default function UsersPage() {
       }
 
       if (Array.isArray(res.data)) {
-        const mapped = res.data.map((u: any) => {
-          const id = u.id ?? u._id ?? u.email ?? String(Math.random()).slice(2);
-          const name = u.name ?? u.email ?? "Unknown";
-          const color = u.colorHex ?? "#c96a2b";
+        const mapped = res.data.map((u: unknown) => {
+          const uu = (u ?? {}) as Record<string, unknown>;
+          const id = String(
+            uu.id ?? uu._id ?? uu.email ?? Math.random().toString().slice(2)
+          );
+          const name = String(uu.name ?? uu.email ?? "Unknown");
+          const color = String(uu.colorHex ?? "#c96a2b");
           const themeLabel =
             THEMES.find(
               (t) => t.color.toLowerCase() === (color || "").toLowerCase()
@@ -233,7 +241,8 @@ export default function UsersPage() {
             id,
             name,
             theme: { name: themeLabel, color },
-            email: u.email,
+            email:
+              typeof uu.email === "string" ? (uu.email as string) : undefined,
           };
         });
 
@@ -255,7 +264,7 @@ export default function UsersPage() {
       } else {
         setHasMore(false);
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Failed to fetch users", err);
     } finally {
       setLoadingInitial(false);
@@ -268,7 +277,6 @@ export default function UsersPage() {
     setOffset(0);
     setHasMore(true);
     fetchPage(0, false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* ---------- IntersectionObserver for infinite scroll ----------
@@ -316,7 +324,7 @@ export default function UsersPage() {
       obs.disconnect();
       observerRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // dependencies intentionally include values used inside effect
   }, [
     sentinelRef.current,
     hasMore,
@@ -390,14 +398,14 @@ export default function UsersPage() {
       } else {
         setUsers(prev);
         alert(
-          res.data?.message ?? "Failed to delete user on server. Rolling back."
+          (res.data && (res.data as Record<string, unknown>).message) ??
+            "Failed to delete user on server. Rolling back."
         );
       }
-    } catch (e) {
+    } catch (err: unknown) {
       setUsers(prev);
-      alert(
-        (e as any)?.message ?? "Failed to delete user on server. Rolling back."
-      );
+      const msg = err instanceof Error ? err.message : String(err ?? "");
+      alert(msg || "Failed to delete user on server. Rolling back.");
     } finally {
       setDeleting(false);
     }
@@ -644,7 +652,7 @@ export default function UsersPage() {
                   color: "rgba(0,0,0,0.6)",
                 }}
               >
-                You've reached the end.
+                You&apos;ve reached the end.
               </div>
             )}
           </div>

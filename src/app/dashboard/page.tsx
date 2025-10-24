@@ -116,64 +116,11 @@ function SpinnerOverlay({ visible }: { visible: boolean }) {
   );
 }
 
-/* Small dev debug panel that shows query states (only when NODE_ENV !== 'production') */
-function DebugPanel({ data }: { data: Record<string, any> }) {
-  if (process.env.NODE_ENV === "production") return null;
-  return (
-    <aside
-      style={{
-        position: "fixed",
-        right: 12,
-        bottom: 12,
-        zIndex: 9999,
-        background: "rgba(0,0,0,0.7)",
-        color: "#fff",
-        padding: 10,
-        borderRadius: 8,
-        fontSize: 12,
-        lineHeight: 1.2,
-        maxWidth: 320,
-        boxShadow: "0 6px 18px rgba(0,0,0,0.2)",
-      }}
-    >
-      <div style={{ fontWeight: 700, marginBottom: 6 }}>
-        react-query (dashboard)
-      </div>
-      {Object.entries(data).map(([k, v]) => (
-        <div key={k} style={{ marginBottom: 6 }}>
-          <div style={{ fontSize: 11, opacity: 0.9 }}>{k}</div>
-          <div style={{ fontFamily: "monospace", fontSize: 11 }}>
-            L:{String(v.isLoading)} F:{String(v.isFetching)} S:
-            {String(v.isSuccess)} E:{String(v.isError)}
-          </div>
-          <div
-            style={{
-              fontFamily: "monospace",
-              fontSize: 11,
-              marginTop: 3,
-              opacity: 0.85,
-            }}
-          >
-            data:{" "}
-            {v.data
-              ? typeof v.data === "string"
-                ? v.data
-                : JSON.stringify(v.data).slice(0, 80) +
-                  (JSON.stringify(v.data).length > 80 ? "…" : "")
-              : "—"}
-          </div>
-        </div>
-      ))}
-    </aside>
-  );
-}
-
 export default function DashboardPage() {
   const router = useRouter();
 
   const [selectedThemeId, setSelectedThemeId] = useState<string | null>(null);
   const [totalUsers, setTotalUsers] = useState<number | null>(null);
-  const [themeUpdating, setThemeUpdating] = useState<string | null>(null);
 
   /* spinnerVisible: starts true (to prevent snap), hides after all queries settled */
   const [spinnerVisible, setSpinnerVisible] = useState<boolean>(true);
@@ -210,7 +157,9 @@ export default function DashboardPage() {
         if (token) config.headers["Authorization"] = `Bearer ${token}`;
         else delete config.headers["Authorization"];
         config.params = { ...config.params, _t: Date.now() };
-      } catch (e) {}
+      } catch {
+        // intentionally ignore errors reading token
+      }
       return config;
     });
     return () => api.interceptors.request.eject(interceptor);
@@ -277,10 +226,15 @@ export default function DashboardPage() {
   }, []);
 
   // handle auth failure from meQuery (redirect on 401)
+  const meIsError = meQuery.isError;
+  const meError = meQuery.error;
   useEffect(() => {
-    if (meQuery.isError) {
-      const errAny: any = (meQuery as any).error;
-      const status = errAny?.response?.status ?? errAny?.status ?? null;
+    if (meIsError) {
+      const errObj =
+        (meError as
+          | { response?: { status?: number }; status?: number }
+          | undefined) ?? undefined;
+      const status = errObj?.response?.status ?? errObj?.status ?? null;
       if (status === 401) {
         try {
           localStorage.removeItem("access_token");
@@ -293,7 +247,7 @@ export default function DashboardPage() {
         return;
       }
     }
-  }, [meQuery.isError, (meQuery as any).error, router]);
+  }, [meIsError, meError, router]);
 
   // when count query completes, sync local state
   useEffect(() => {
@@ -345,31 +299,6 @@ export default function DashboardPage() {
     };
   }, [allSettled]);
 
-  /* Debug info object for the dev panel */
-  const debugInfo = {
-    me: {
-      isLoading: meQuery.isLoading,
-      isFetching: meQuery.isFetching,
-      isSuccess: meQuery.isSuccess,
-      isError: meQuery.isError,
-      data: meQuery.data,
-    },
-    count: {
-      isLoading: countQuery.isLoading,
-      isFetching: countQuery.isFetching,
-      isSuccess: countQuery.isSuccess,
-      isError: countQuery.isError,
-      data: countQuery.data,
-    },
-    theme: {
-      isLoading: themeQuery.isLoading,
-      isFetching: themeQuery.isFetching,
-      isSuccess: themeQuery.isSuccess,
-      isError: themeQuery.isError,
-      data: themeQuery.data,
-    },
-  };
-
   async function handleThemeSelect(id: string) {
     const theme = THEMES.find((t) => t.id === id);
     if (!theme) return;
@@ -392,7 +321,6 @@ export default function DashboardPage() {
       localStorage.setItem(STORAGE_KEY, theme.id);
     } catch {}
 
-    setThemeUpdating(id);
     try {
       const res = await api.patch("/themes", { themeId: id });
       if (res.status >= 200 && res.status < 300) {
@@ -412,14 +340,12 @@ export default function DashboardPage() {
           if (prevThemeId) localStorage.setItem(STORAGE_KEY, prevThemeId);
         } catch {}
       }
-    } catch (err) {
+    } catch {
       if (prevColor) applyThemeVars(prevColor);
       setSelectedThemeId(prevThemeId);
       try {
         if (prevThemeId) localStorage.setItem(STORAGE_KEY, prevThemeId);
       } catch {}
-    } finally {
-      setThemeUpdating(null);
     }
   }
 
@@ -475,7 +401,6 @@ export default function DashboardPage() {
                 key={t.id}
                 id={t.id}
                 label={t.label}
-                img={t.img}
                 selected={t.id === selectedThemeId}
                 onSelect={handleThemeSelect}
               />

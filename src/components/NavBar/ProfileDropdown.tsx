@@ -10,7 +10,7 @@ import {
 import { api, getToken } from "@/lib/api";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-type ServerResp = { status: number; data: any };
+type ServerResp = { status: number; data: unknown };
 
 /**
  * ProfileDropdown - fully typed
@@ -69,9 +69,12 @@ export default function ProfileDropdown(): JSX.Element {
           setLoading(false);
           return;
         }
-        const payload = res.data?.data ?? res.data;
-        setOrigEmail(payload?.email || "");
-        setOrigName(payload?.name || "");
+        const payload = (res.data?.data ?? res.data) as Record<
+          string,
+          unknown
+        > | null;
+        setOrigEmail((payload?.email as string) ?? "");
+        setOrigName((payload?.name as string) ?? "");
         // keep inputs empty per previous behavior (user types to change)
         setName("");
         setEmail("");
@@ -89,7 +92,7 @@ export default function ProfileDropdown(): JSX.Element {
     ServerResp,
     unknown,
     string,
-    { previous?: any }
+    { previous?: unknown }
   >({
     mutationFn: async (newName: string) => {
       const token = getToken();
@@ -102,26 +105,50 @@ export default function ProfileDropdown(): JSX.Element {
     },
     onMutate: async (newName: string) => {
       await queryClient.cancelQueries({ queryKey: ["me"] });
-      const previous = queryClient.getQueryData<any>(["me"]);
-      queryClient.setQueryData(["me"], (old: any) => ({
-        ...(old ?? {}),
-        name: newName,
-      }));
+      const previous = queryClient.getQueryData<unknown>(["me"]);
+      queryClient.setQueryData(["me"], (old: unknown) => {
+        const o = (old as Record<string, unknown> | null) ?? {};
+        return {
+          ...o,
+          name: newName,
+        };
+      });
       return { previous };
     },
-    onError: (err: unknown, newName: string, context?: { previous?: any }) => {
+    onError: (
+      _err: unknown,
+      _newName: string,
+      context?: { previous?: unknown }
+    ) => {
       if (context?.previous) {
         queryClient.setQueryData(["me"], context.previous);
       }
     },
     onSuccess: (res: ServerResp, newName: string) => {
       if (res?.status >= 200 && res?.status < 300) {
-        const returned = res?.data;
-        const serverName = returned?.name ?? returned?.data?.name ?? newName;
-        queryClient.setQueryData(["me"], (old: any) => ({
-          ...(old ?? {}),
-          name: serverName,
-        }));
+        const returned = res?.data as Record<string, unknown> | null;
+
+        let serverName = newName;
+
+        // returned.name as string?
+        if (returned && typeof returned.name === "string") {
+          serverName = returned.name;
+        } else if (
+          returned &&
+          typeof returned.data === "object" &&
+          returned.data !== null
+        ) {
+          const nested = returned.data as Record<string, unknown>;
+          if (typeof nested.name === "string") serverName = nested.name;
+        }
+
+        queryClient.setQueryData(["me"], (old: unknown) => {
+          const o = (old as Record<string, unknown> | null) ?? {};
+          return {
+            ...o,
+            name: serverName,
+          };
+        });
       }
     },
     onSettled: () => {
@@ -157,14 +184,18 @@ export default function ProfileDropdown(): JSX.Element {
       // 1) Update name only if user typed a name and it's different from origName
       if (nameProvided && name.trim() !== origName.trim()) {
         const mutateResult = await nameMutation.mutateAsync(name.trim());
+        const mutateData =
+          (mutateResult?.data as Record<string, unknown> | null) ?? null;
+
         if (
           !mutateResult ||
           mutateResult.status >= 400 ||
-          mutateResult.data?.ok === false
+          (mutateData && mutateData["ok"] === false)
         ) {
+          const data = mutateResult?.data as Record<string, unknown> | null;
           setError(
-            mutateResult?.data?.error ||
-              mutateResult?.data?.message ||
+            (data?.error as string) ||
+              (data?.message as string) ||
               "Failed to update name"
           );
           setSaving(false);
@@ -187,10 +218,18 @@ export default function ProfileDropdown(): JSX.Element {
           { newEmail: email.trim() },
           { headers }
         );
-        if (emailRes.status >= 400 || emailRes.data?.ok === false) {
+
+        const emailData =
+          (emailRes.data as Record<string, unknown> | null) ?? null;
+
+        if (
+          emailRes.status >= 400 ||
+          (emailData && emailData["ok"] === false)
+        ) {
+          const d = emailData;
           setError(
-            emailRes.data?.error ||
-              emailRes.data?.message ||
+            (d?.error as string) ||
+              (d?.message as string) ||
               "Failed to initiate email change"
           );
           setSaving(false);
@@ -219,10 +258,18 @@ export default function ProfileDropdown(): JSX.Element {
       setName("");
       setEmail("");
       setOpen(false);
-    } catch (err: any) {
-      setError(
-        (err?.message as string) ?? "Network error while saving changes"
-      );
+    } catch (err: unknown) {
+      let msg = "Network error while saving changes";
+      if (err instanceof Error) msg = err.message;
+      else if (typeof err === "object" && err !== null) {
+        try {
+          const maybe = err as Record<string, unknown>;
+          if (typeof maybe.message === "string") msg = maybe.message;
+        } catch {
+          /* ignore */
+        }
+      }
+      setError(msg);
     } finally {
       setSaving(false);
       // refresh server state

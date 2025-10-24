@@ -5,6 +5,7 @@ import { Eye, EyeOff, RotateCw } from "lucide-react";
 import "./loginForm.css";
 import axios from "axios";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import LModal from "@/components/LModal/LModal"; // ✅ Only LModal imported now
 
 export default function LoginForm() {
@@ -18,11 +19,10 @@ export default function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
 
   // ---------- CAPTCHA states (token-based per your backend) ----------
-  const [captchaSvg, setCaptchaSvg] = useState<string | null>(null); // raw svg string
+  const [captchaSvg, setCaptchaSvg] = useState<string | null>(null); // raw svg string or data url
   const [captchaToken, setCaptchaToken] = useState<string | null>(null); // ephemeral token returned by backend
   const [captchaInput, setCaptchaInput] = useState("");
   const [captchaLoading, setCaptchaLoading] = useState(false);
-  const [captchaExpiresIn, setCaptchaExpiresIn] = useState<number | null>(null);
 
   // backend base from env (falls back to localhost:3001)
   const BACKEND_BASE =
@@ -32,11 +32,11 @@ export default function LoginForm() {
   function persistTokenLocal(key: string, token: string) {
     try {
       localStorage.setItem(key, token); // ALWAYS store in localStorage
-    } catch (e) {
+    } catch {
       // fallback: sessionStorage (should be rare)
       try {
         sessionStorage.setItem(key, token);
-      } catch (e2) {
+      } catch {
         // ignore
       }
     }
@@ -58,7 +58,6 @@ export default function LoginForm() {
       if (body?.svg && body?.token) {
         setCaptchaSvg(body.svg);
         setCaptchaToken(body.token);
-        setCaptchaExpiresIn(body.expiresIn ?? null);
         setCaptchaInput("");
       } else {
         // fallback: if server returned raw svg string directly
@@ -68,12 +67,10 @@ export default function LoginForm() {
         ) {
           setCaptchaSvg(res.data);
           setCaptchaToken(null);
-          setCaptchaExpiresIn(null);
           setCaptchaInput("");
         } else {
           setCaptchaSvg(null);
           setCaptchaToken(null);
-          setCaptchaExpiresIn(null);
           setError("Failed to load captcha from server.");
         }
       }
@@ -82,7 +79,6 @@ export default function LoginForm() {
       setError("Unable to load captcha. Try refreshing the page.");
       setCaptchaSvg(null);
       setCaptchaToken(null);
-      setCaptchaExpiresIn(null);
     } finally {
       setCaptchaLoading(false);
     }
@@ -93,7 +89,7 @@ export default function LoginForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // verify captcha with backend (POST /auth/captcha/verify) → { token, answer }
+  // verify captcha with backend (POST /auth/captcha/verify) → { ok: boolean, message? }
   const verifyCaptcha = async (): Promise<{
     ok: boolean;
     message?: string;
@@ -193,12 +189,15 @@ export default function LoginForm() {
 
         try {
           localStorage.setItem("token", token);
-        } catch (e) {}
+        } catch {
+          // ignore
+        }
 
         try {
-          // @ts-ignore
           axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-        } catch (e) {}
+        } catch {
+          // ignore
+        }
 
         setPassword("");
         router.push("/dashboard");
@@ -235,14 +234,24 @@ export default function LoginForm() {
         <div
           className="captcha-svg"
           aria-hidden={false}
-          // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: captchaSvg }}
         />
       );
     }
 
-    // otherwise assume data url or external url (unlikely here)
-    return <img src={captchaSvg} alt="captcha" className="captcha-img" />;
+    // otherwise assume data url or external url
+    // use next/image for better lint results / optimization
+    return (
+      <div style={{ display: "inline-block", lineHeight: 0 }}>
+        <Image
+          src={captchaSvg}
+          alt="captcha"
+          width={160}
+          height={56}
+          style={{ display: "block", maxWidth: "100%", height: "auto" }}
+        />
+      </div>
+    );
   };
 
   return (

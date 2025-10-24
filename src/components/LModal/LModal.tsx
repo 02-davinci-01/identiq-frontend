@@ -1,7 +1,8 @@
+// src/components/LModal/LModal.tsx
 "use client";
 
 import React, { useEffect, useState } from "react";
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 import "./modal.css"; // for the overlay/blur styling
 
 type Props = {
@@ -57,12 +58,18 @@ export default function LModal({ open, onClose }: Props) {
         setLoading(false);
         onClose();
       }, 1400);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Forgot password send failed", err);
-      const msg =
-        err?.response?.data?.message ||
-        err?.message ||
-        "Failed to send reset link. Try again later.";
+
+      let msg = "Failed to send reset link. Try again later.";
+
+      if (axios.isAxiosError(err)) {
+        const axiosErr = err as AxiosError<{ message?: string }>;
+        msg = axiosErr.response?.data?.message || axiosErr.message || msg;
+      } else if (err instanceof Error) {
+        msg = err.message;
+      }
+
       setError(String(msg));
       setLoading(false);
     }
@@ -157,10 +164,10 @@ export default function LModal({ open, onClose }: Props) {
                     boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
                   }}
                   onMouseOver={(e) => {
-                    (e.currentTarget.style.background = "rgba(0,0,0,0.03)");
+                    e.currentTarget.style.background = "rgba(0,0,0,0.03)";
                   }}
                   onMouseOut={(e) => {
-                    (e.currentTarget.style.background = "transparent");
+                    e.currentTarget.style.background = "transparent";
                   }}
                   disabled={loading}
                 >
@@ -179,9 +186,7 @@ export default function LModal({ open, onClose }: Props) {
                     fontWeight: 600,
                     borderRadius: 8,
                     border: "none",
-                    background: loading
-                      ? "#c9c9c9"
-                      : "var(--accent, #c96a2b)",
+                    background: loading ? "#c9c9c9" : "var(--accent, #c96a2b)",
                     color: "#fff",
                     cursor: loading ? "not-allowed" : "pointer",
                     boxShadow: "0 2px 5px rgba(0,0,0,0.08)",

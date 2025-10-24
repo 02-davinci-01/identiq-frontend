@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useReducer, useState } from "react";
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 import "./completeRegisterForm.css";
 import { showBreadcrumb } from "@/lib/breadcrumb";
 
@@ -43,13 +43,18 @@ function reducer(state: State, action: Action): State {
   }
 }
 
+type TokenLocation = {
+  userEmail: string | null;
+  userToken: string | null;
+};
+
 export default function CompleteRegisterForm() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const { password, confirmPassword, error, loading } = state;
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  const getTokenFromLocation = (): any | null => {
+  const getTokenFromLocation = (): TokenLocation | null => {
     if (typeof window === "undefined") return null;
     try {
       const params = new URLSearchParams(window.location.search);
@@ -71,7 +76,7 @@ export default function CompleteRegisterForm() {
     return null;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     dispatch({ type: "SET_ERROR", payload: null });
 
@@ -85,7 +90,9 @@ export default function CompleteRegisterForm() {
       dispatch({ type: "SET_LOADING", payload: true });
 
       const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-      const { userToken, userEmail } = getTokenFromLocation();
+      const tokens = getTokenFromLocation();
+      const userToken = tokens?.userToken;
+      const userEmail = tokens?.userEmail;
 
       const url = `${base.replace(/\/$/, "")}/auth/complete-register${
         userToken && userEmail
@@ -95,17 +102,15 @@ export default function CompleteRegisterForm() {
           : ""
       }`;
 
-      const payload = {
-        password,
-      };
+      const payload = { password };
 
-      const res = await axios.post(url, payload, {
+      const res = await axios.post<{ message?: string }>(url, payload, {
         headers: { "Content-Type": "application/json" },
         timeout: 10000,
       });
 
       const successMsg =
-        res?.data?.message || "Password set successfully. You can now log in.";
+        res.data?.message || "Password set successfully. You can now log in.";
       showBreadcrumb(successMsg, "success");
 
       dispatch({ type: "RESET" });
@@ -115,17 +120,26 @@ export default function CompleteRegisterForm() {
           window.location.href = "/auth/login";
         }, 1200);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       let msg = "Failed to complete registration. Please try again.";
+
       if (axios.isAxiosError(err)) {
-        if (err.response?.data) {
-          if (typeof err.response.data === "string") msg = err.response.data;
-          else if (err.response.data.message) msg = err.response.data.message;
-          else if (err.response.data.error) msg = err.response.data.error;
-        } else if (err.message) {
-          msg = err.message;
+        const axiosErr = err as AxiosError<{
+          message?: string;
+          error?: string;
+        }>;
+        const data = axiosErr.response?.data;
+        if (data) {
+          if (typeof data === "string") msg = data;
+          else if (data.message) msg = data.message;
+          else if (data.error) msg = data.error;
+        } else if (axiosErr.message) {
+          msg = axiosErr.message;
         }
+      } else if (err instanceof Error) {
+        msg = err.message;
       }
+
       dispatch({ type: "SET_ERROR", payload: msg });
       showBreadcrumb(msg, "error");
       console.error("Complete register error:", err);

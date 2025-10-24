@@ -89,7 +89,7 @@ export function GenericModal({
   useEffect(() => {
     if (!open) return;
 
-    // When opening, also clear any leftover values inside modal DOM so fields always start empty.
+    // Clear leftover values when modal opens
     try {
       clearInputsIn(modalRef.current);
     } catch {
@@ -118,7 +118,7 @@ export function GenericModal({
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [open]);
+  }, [open, handleClose]); // ✅ Added handleClose dependency
 
   if (!open) return null;
 
@@ -243,8 +243,8 @@ export function ChangePasswordModal({ open, onClose }: ChangePasswordProps) {
       }
 
       setError(json?.error || json?.message || "Failed to change password.");
-    } catch (err) {
-      setError("Network error changing password.");
+    } catch {
+      setError("Network error changing password."); // ✅ removed unused `err`
     } finally {
       setLoading(false);
     }
@@ -395,7 +395,7 @@ export function DeleteAccountModal({ open, onClose }: DeleteAccountProps) {
       }
       setError(json?.error || json?.message || "Failed to delete account.");
     } catch {
-      setError("Network error during deletion.");
+      setError("Network error during deletion."); // ✅ removed unused `err`
     } finally {
       setLoading(false);
     }

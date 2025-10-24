@@ -6,7 +6,6 @@ import Header from "@/components/header";
 import { IBM_Plex_Mono, Josefin_Sans } from "next/font/google";
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
 const ibmPlexMono = IBM_Plex_Mono({
   subsets: ["latin"],
@@ -51,9 +50,10 @@ export default function RootLayout({
           <footer className="site-footer">
             © {new Date().getFullYear()} · User Management
           </footer>
-          {/* {process.env.NODE_ENV !== "production" && (
-            <ReactQueryDevtools initialIsOpen={false} />
-          )} */}
+          {/* If you ever need React Query Devtools in dev:
+              import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+              and uncomment below:
+              <ReactQueryDevtools initialIsOpen={false} /> */}
         </QueryClientProvider>
       </body>
     </html>

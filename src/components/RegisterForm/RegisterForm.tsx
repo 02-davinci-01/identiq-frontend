@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useReducer } from "react";
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 import "./registerForm.css";
 import { showBreadcrumb } from "@/lib/breadcrumb";
 
@@ -53,7 +53,7 @@ export default function RegisterForm() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const { userName, email, remember, error, loading } = state;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     dispatch({ type: "SET_ERROR", payload: null });
 
@@ -71,7 +71,7 @@ export default function RegisterForm() {
 
       const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
-      // server expects { name, email } (confirmed from your controller & service). :contentReference[oaicite:2]{index=2} :contentReference[oaicite:3]{index=3}
+      // server expects { name, email } (confirmed from your controller & service)
       const payload = {
         name: userName,
         email,
@@ -94,19 +94,35 @@ export default function RegisterForm() {
       showBreadcrumb(successMessage, "success");
 
       dispatch({ type: "RESET_FORM" });
-    } catch (err: any) {
-      // axios error normalization
+    } catch (err: unknown) {
+      // Normalize errors safely (no `any`)
       let msg = "Registration failed. Please try again.";
-      if (err?.response?.data) {
-        // backend likely returns { message: '...' } or throw BadRequestException
-        if (typeof err.response.data === "string") msg = err.response.data;
-        else if (err.response.data.message) msg = err.response.data.message;
-        else if (err.response.data.error) msg = err.response.data.error;
-      } else if (err?.message) {
+
+      if (axios.isAxiosError(err)) {
+        const axiosErr = err as AxiosError<unknown>;
+        const data = axiosErr.response?.data;
+
+        if (typeof data === "string") {
+          msg = data;
+        } else if (data && typeof data === "object") {
+          try {
+            const d = data as Record<string, unknown>;
+            if (typeof d.message === "string") msg = d.message;
+            else if (typeof d.error === "string") msg = d.error;
+          } catch {
+            /* ignore parse errors */
+          }
+        } else if (axiosErr.message) {
+          msg = axiosErr.message;
+        }
+      } else if (err instanceof Error) {
         msg = err.message;
       }
+
       dispatch({ type: "SET_ERROR", payload: msg });
       showBreadcrumb(msg, "error");
+      // keep the original object for console debugging
+      // eslint-disable-next-line no-console
       console.error("Register error:", err);
     } finally {
       dispatch({ type: "SET_LOADING", payload: false });
@@ -160,7 +176,6 @@ export default function RegisterForm() {
 
           {/* password removed here: password is set on complete-register after email verification */}
 
-          
           <button
             className="btn btn-accent register-submit"
             type="submit"

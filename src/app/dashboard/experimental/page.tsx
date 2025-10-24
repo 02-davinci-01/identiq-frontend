@@ -1,3 +1,4 @@
+// src/app/dashboard/experimental/page.tsx
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -83,7 +84,9 @@ api.interceptors.request.use((config) => {
     config.headers = config.headers ?? {};
     if (token) config.headers["Authorization"] = `Bearer ${token}`;
     else delete config.headers["Authorization"];
-  } catch (e) {}
+  } catch {
+    // intentionally ignore localStorage read errors
+  }
   return config;
 });
 
@@ -94,6 +97,14 @@ type AttemptLogEntry = {
   status: AttemptStatus;
   message: string;
   ts: string;
+};
+
+type BackendUser = {
+  id?: string;
+  _id?: string;
+  name?: string;
+  email?: string;
+  colorHex?: string;
 };
 
 export default function ExperimentalPage() {
@@ -137,7 +148,9 @@ export default function ExperimentalPage() {
       };
       const color = mapping[storedId] ?? mapping["light"];
       applyThemeVars(color);
-    } catch (e) {}
+    } catch {
+      // ignore
+    }
   }, []);
 
   function delay(ms: number) {
@@ -178,11 +191,14 @@ export default function ExperimentalPage() {
 
         const extra = Math.floor(Math.random() * jitterMs);
         await delay(waitMs + extra);
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error ? err.message : String(err ?? "unknown error");
+
         const entry: AttemptLogEntry = {
           attempt: attempts,
           status: "error",
-          message: err?.message ?? "unknown error",
+          message,
           ts: new Date().toISOString(),
         };
         options?.onAttempt?.(entry);
@@ -206,10 +222,10 @@ export default function ExperimentalPage() {
 
     const endpoint = `/users/experimental?limit=${pageLimit}&offset=${pageOffset}`;
 
-    const { data, attempts } = await fetchWithRetries<any[]>(
+    const { data, attempts } = await fetchWithRetries<BackendUser[]>(
       async () => {
         const res = await api.get(endpoint);
-        return res.data;
+        return res.data as BackendUser[];
       },
       (result) => Array.isArray(result) && result.length > 0,
       {
@@ -225,7 +241,7 @@ export default function ExperimentalPage() {
     setTriesCount(attempts);
 
     if (Array.isArray(data) && data.length > 0) {
-      const mapped = data.map((u: any) => {
+      const mapped = data.map((u: BackendUser) => {
         const id = u.id ?? u._id ?? u.email ?? String(Math.random()).slice(2);
         const name = u.name ?? u.email ?? "Unknown";
         const color = u.colorHex ?? "#c96a2b";
@@ -267,7 +283,9 @@ export default function ExperimentalPage() {
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            loadNextPage().catch((e) => console.error("loadNextPage error", e));
+            loadNextPage().catch((err) =>
+              console.error("loadNextPage error", err)
+            );
           }
         });
       },
@@ -342,11 +360,10 @@ export default function ExperimentalPage() {
           res.data?.message ?? "Failed to delete user on server. Rolling back."
         );
       }
-    } catch (e) {
+    } catch (err: unknown) {
       setUsers(prev);
-      alert(
-        (e as any)?.message ?? "Failed to delete user on server. Rolling back."
-      );
+      const msg = err instanceof Error ? err.message : String(err ?? "");
+      alert(msg || "Failed to delete user on server. Rolling back.");
     } finally {
       setDeleting(false);
     }

@@ -16,14 +16,12 @@ const THEMES: Theme[] = [
 export default function ThemePreview({
   id,
   label,
-  img,
   selected = false,
   onSelect,
   applyLabel = "Apply",
 }: {
   id: string;
   label: string;
-  img: string;
   selected?: boolean;
   onSelect?: (id: string) => void;
   applyLabel?: string;
@@ -116,7 +114,7 @@ export default function ThemePreview({
               ))}
             </div>
 
-            {/* bold "HEX" then hex code (no theme name here per request) */}
+            {/* bold "HEX" then hex code */}
             <div style={{ flex: 1 }}>
               <div
                 style={{
@@ -143,7 +141,6 @@ export default function ThemePreview({
       </div>
 
       <div className={styles.previewActions}>
-        {/* Keep the theme name label below as it already exists elsewhere */}
         <div className={styles.labelStrong}>{label}</div>
         <button
           className={styles.btnSmall}
@@ -176,8 +173,13 @@ function generateColorsFromId(seed: string): string[] {
     h = Math.imul(h, 16777619) >>> 0;
   }
   const baseHue = h % 360;
-  const colors = [baseHue, (baseHue + 24) % 360, (baseHue + 48) % 360, (baseHue + 72) % 360].map(
-    (hh, idx) => hslToHex((hh + idx * 6) % 360, 72 - idx * 6, 62 - idx * 4)
+  const colors = [
+    baseHue,
+    (baseHue + 24) % 360,
+    (baseHue + 48) % 360,
+    (baseHue + 72) % 360,
+  ].map((hh, idx) =>
+    hslToHex((hh + idx * 6) % 360, 72 - idx * 6, 62 - idx * 4)
   );
   return colors;
 }
@@ -203,7 +205,13 @@ function hslToHex(h: number, s: number, l: number): string {
  */
 function shadeHex(hex: string, percent: number): string {
   const h = hex.replace("#", "");
-  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const full =
+    h.length === 3
+      ? h
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : h;
   const num = parseInt(full, 16);
   let r = (num >> 16) & 0xff;
   let g = (num >> 8) & 0xff;
