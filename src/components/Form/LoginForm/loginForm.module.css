@@ -1,23 +1,24 @@
-/* src/components/LoginForm/loginForm.css */
+/* src/components/LoginForm/loginForm.module.css */
+
 /* Card / container */
-.login-card {
+.loginCard {
   width: 100%;
   max-width: 420px;
-  background: var(--bg-page); /* white */
+  background: var(--bg-page);
   border-radius: 12px;
   padding: 22px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
   border: 1px solid rgba(0, 0, 0, 0.04);
 }
 
-.login-card-inner {
+.loginCardInner {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
 /* Headings */
-.login-title {
+.loginTitle {
   font-family: var(--font-primary);
   font-size: 28px;
   margin: 0;
@@ -25,7 +26,7 @@
   font-weight: 700;
 }
 
-.login-sub {
+.loginSub {
   font-family: var(--font-secondary);
   font-size: 15px;
   color: rgba(0, 0, 0, 0.65);
@@ -33,26 +34,26 @@
 }
 
 /* Form layout */
-.login-form {
+.loginForm {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.login-field {
+.loginField {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.login-label {
+.loginLabel {
   font-size: 14px;
   color: var(--fg);
   font-weight: 600;
 }
 
-/* Inputs: match global font sizes */
-.login-input {
+/* Inputs */
+.loginInput {
   height: 44px;
   padding: 10px 12px;
   border-radius: 8px;
@@ -63,23 +64,24 @@
   background: #fff;
 }
 
-.login-input:focus {
+.loginInput:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 4px rgba(255, 122, 0, 0.12);
   outline: none;
 }
 
-/* row helpers */
-.login-row {
+/* Row helpers */
+.loginRow {
   display: flex;
   align-items: center;
 }
-.login-between {
+
+.loginBetween {
   justify-content: space-between;
 }
 
-/* remember checkbox */
-.login-checkbox {
+/* Remember checkbox */
+.loginCheckbox {
   display: inline-flex;
   gap: 8px;
   align-items: center;
@@ -87,8 +89,8 @@
   font-size: 14px;
 }
 
-/* link button for forgot */
-.login-link-btn {
+/* Forgot password link */
+.loginLinkBtn {
   background: transparent;
   border: none;
   color: var(--accent);
@@ -98,16 +100,16 @@
   padding: 4px;
 }
 
-/* Submit button uses global .btn-accent (defined in globals). Provide a fallback style. */
-.login-submit {
+/* Submit button */
+.loginSubmit {
   width: 100%;
   height: 44px;
   font-size: 15px;
   border-radius: 8px;
 }
 
-/* error */
-.login-error {
+/* Error message */
+.loginError {
   padding: 10px;
   background: rgba(211, 47, 47, 0.08);
   color: #d32f2f;
@@ -115,8 +117,8 @@
   font-size: 14px;
 }
 
-/* divider */
-.login-divider {
+/* Divider */
+.loginDivider {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -124,46 +126,46 @@
   margin-bottom: 2px;
 }
 
-.login-divider::before,
-.login-divider::after {
+.loginDivider::before,
+.loginDivider::after {
   content: "";
   flex: 1;
   height: 1px;
   background: rgba(0, 0, 0, 0.06);
 }
 
-.login-divider span {
+.loginDivider span {
   font-size: 13px;
   color: rgba(0, 0, 0, 0.6);
 }
 
-/* socials row uses global .btn-ghost */
-.login-socials {
+/* Social login buttons grid */
+.loginSocials {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
 
-/* signup text */
-.login-signup {
+/* Signup text */
+.loginSignup {
   text-align: center;
   font-size: 14px;
   color: rgba(0, 0, 0, 0.65);
   margin-top: 6px;
 }
 
-.login-link {
+.loginLink {
   color: var(--accent);
   font-weight: 600;
 }
 
-/* responsiveness */
+/* Responsiveness */
 @media (max-width: 480px) {
-  .login-card {
+  .loginCard {
     padding: 16px;
   }
 
-  .login-title {
+  .loginTitle {
     font-size: 24px;
   }
 }
@@ -171,44 +173,41 @@
 /* -------------------------------
    PASSWORD FIELD FORMATTING
    ------------------------------- */
-
-.password-wrapper {
-  position: relative; /* allows absolutely positioning the eye button */
+.passwordWrapper {
+  position: relative;
   display: flex;
   align-items: center;
 }
 
-.password-input {
+.passwordInput {
   width: 100%;
-  padding-right: 42px; /* reserve space for the eye button */
+  padding-right: 42px;
 }
 
-/* The button that contains the eye icon */
-.password-toggle {
+.passwordToggle {
   position: absolute;
-  right: 10px; /* aligns icon inside input */
+  right: 10px;
   top: 50%;
-  transform: translateY(-50%); /* vertical centering */
+  transform: translateY(-50%);
   background: transparent;
   border: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(0, 0, 0, 0.6); /* grayish by default */
+  color: rgba(0, 0, 0, 0.6);
   transition: color 0.2s ease-in-out, transform 0.1s ease-in-out;
 }
 
-.password-toggle:hover {
-  color: var(--accent); /* your orange accent */
+.passwordToggle:hover {
+  color: var(--accent);
   transform: translateY(-50%) scale(1.05);
 }
 
-/* The Eye / EyeOff Lucide icon */
-.password-icon {
-  pointer-events: none; /* makes the icon itself ignore clicks (button handles them) */
+.passwordIcon {
+  pointer-events: none;
   width: 20px;
   height: 20px;
   stroke-width: 2;
-  stroke: currentColor; /* inherits color from the button */
+  stroke: currentColor;
 }

@@ -1,6 +1,6 @@
 // src/app/auth/forgot-password/page.tsx
 import React from "react";
-import ForgotPasswordForm from "@/components/ForgotPasswordForm/ForgotPasswordForm";
+import ForgotPasswordForm from "@/components/Form/ForgotPasswordForm/ForgotPasswordForm";
 
 export const dynamic = "force-static";
 

@@ -1,8 +1,8 @@
 import React from "react";
-import Topbar from "@/components/Dashboard/Topbar";
-import Sidebar from "@/components/Dashboard/Sidebar";
+import Topbar from "@/components/Dashboard/Topbar/Topbar";
+import Sidebar from "@/components/Dashboard/Sidebar/Sidebar";
 import styles from "./styles/dashboard.module.css";
-import Providers from "@/components/Providers";
+import Providers from "@/components/Provider/Providers";
 
 export default function DashboardLayout({
   children,

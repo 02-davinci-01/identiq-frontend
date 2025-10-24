@@ -6,7 +6,7 @@ import styles from "./profileDropdown.module.css";
 import {
   ChangePasswordModal,
   DeleteAccountModal,
-} from "@/components/Modal/Modal";
+} from "@/components/Modal/DashboardModal/DashboardModal";
 import { api, getToken } from "@/lib/api";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 

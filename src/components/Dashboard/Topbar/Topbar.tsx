@@ -3,7 +3,7 @@
 
 import React from "react";
 import styles from "@/app/dashboard/styles/dashboard.module.css";
-import ProfileDropdown from "@/components/NavBar/ProfileDropdown";
+import ProfileDropdown from "@/components/Dashboard/NavBar/ProfileDropdown";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 

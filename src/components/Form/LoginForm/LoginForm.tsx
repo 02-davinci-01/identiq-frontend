@@ -2,11 +2,11 @@
 
 import React, { useEffect, useState } from "react";
 import { Eye, EyeOff, RotateCw } from "lucide-react";
-import "./loginForm.css";
+import styles from "./loginForm.module.css";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import LModal from "@/components/LModal/LModal"; // ✅ Only LModal imported now
+import LModal from "@/components/Modal/LoginModal/LoginModal"; // ✅ Only LModal imported now
 
 export default function LoginForm() {
   const router = useRouter();
@@ -18,22 +18,19 @@ export default function LoginForm() {
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // ---------- CAPTCHA states (token-based per your backend) ----------
-  const [captchaSvg, setCaptchaSvg] = useState<string | null>(null); // raw svg string or data url
-  const [captchaToken, setCaptchaToken] = useState<string | null>(null); // ephemeral token returned by backend
+  // CAPTCHA states
+  const [captchaSvg, setCaptchaSvg] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [captchaInput, setCaptchaInput] = useState("");
   const [captchaLoading, setCaptchaLoading] = useState(false);
 
-  // backend base from env (falls back to localhost:3001)
   const BACKEND_BASE =
     (process.env.NEXT_PUBLIC_API_URL as string) || "https://localhost:3001";
 
-  // helper: persist token — per your request we ALWAYS store the canonical token in localStorage
   function persistTokenLocal(key: string, token: string) {
     try {
-      localStorage.setItem(key, token); // ALWAYS store in localStorage
+      localStorage.setItem(key, token);
     } catch {
-      // fallback: sessionStorage (should be rare)
       try {
         sessionStorage.setItem(key, token);
       } catch {
@@ -42,7 +39,6 @@ export default function LoginForm() {
     }
   }
 
-  // fetch captcha from backend (GET /auth/captcha) — expects { svg, token, expiresIn }
   const fetchCaptcha = async () => {
     setCaptchaLoading(true);
     setError(null);
@@ -54,13 +50,11 @@ export default function LoginForm() {
 
       const body = res.data ?? {};
 
-      // prefer explicit keys { svg, token, expiresIn }
       if (body?.svg && body?.token) {
         setCaptchaSvg(body.svg);
         setCaptchaToken(body.token);
         setCaptchaInput("");
       } else {
-        // fallback: if server returned raw svg string directly
         if (
           typeof res.data === "string" &&
           res.data.trim().startsWith("<svg")
@@ -89,7 +83,6 @@ export default function LoginForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // verify captcha with backend (POST /auth/captcha/verify) → { ok: boolean, message? }
   const verifyCaptcha = async (): Promise<{
     ok: boolean;
     message?: string;
@@ -97,7 +90,6 @@ export default function LoginForm() {
     if (!captchaToken) {
       return { ok: false, message: "Captcha token missing, please refresh." };
     }
-
     if (!captchaInput || !captchaInput.trim()) {
       return { ok: false, message: "Please enter the captcha text." };
     }
@@ -113,12 +105,8 @@ export default function LoginForm() {
       );
 
       const body = res.data ?? {};
-      // controller returns { ok: true } on success per your DTO
-      if (body?.ok === true) {
-        return { ok: true };
-      }
+      if (body?.ok === true) return { ok: true };
 
-      // server may send reason / message
       return {
         ok: false,
         message: body?.reason || body?.message || "Captcha incorrect",
@@ -138,7 +126,6 @@ export default function LoginForm() {
       return;
     }
 
-    // enforce captcha is entered
     if (!captchaInput || !captchaInput.trim()) {
       setError("Please solve the captcha before signing in.");
       return;
@@ -147,17 +134,14 @@ export default function LoginForm() {
     setLoading(true);
 
     try {
-      // 1) verify captcha first
       const verify = await verifyCaptcha();
       if (!verify.ok) {
         setError(verify.message || "Captcha verification failed.");
-        // refresh captcha after a failed verify
         await fetchCaptcha();
         setLoading(false);
         return;
       }
 
-      // 2) proceed with login request (unchanged behavior)
       const res = await axios.post(
         `${BACKEND_BASE}/auth/login`,
         { email: email.trim(), password },
@@ -186,19 +170,12 @@ export default function LoginForm() {
 
       if (token) {
         persistTokenLocal("access_token", token);
-
         try {
           localStorage.setItem("token", token);
-        } catch {
-          // ignore
-        }
-
+        } catch {}
         try {
           axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-        } catch {
-          // ignore
-        }
-
+        } catch {}
         setPassword("");
         router.push("/dashboard");
         return;
@@ -219,28 +196,26 @@ export default function LoginForm() {
     }
   };
 
-  // helper to render svg or image
   const renderCaptcha = () => {
     if (!captchaSvg) {
-      return <div className="captcha-placeholder">Captcha not available</div>;
+      return (
+        <div className={styles.captchaPlaceholder}>Captcha not available</div>
+      );
     }
 
-    // svg string
     if (
       typeof captchaSvg === "string" &&
       captchaSvg.trim().startsWith("<svg")
     ) {
       return (
         <div
-          className="captcha-svg"
+          className={styles.captchaSvg}
           aria-hidden={false}
           dangerouslySetInnerHTML={{ __html: captchaSvg }}
         />
       );
     }
 
-    // otherwise assume data url or external url
-    // use next/image for better lint results / optimization
     return (
       <div style={{ display: "inline-block", lineHeight: 0 }}>
         <Image
@@ -256,26 +231,30 @@ export default function LoginForm() {
 
   return (
     <>
-      <div className="login-card" role="region" aria-labelledby="lf-heading">
-        <div className="login-card-inner">
-          <h2 id="lf-heading" className="login-title">
+      <div
+        className={styles.loginCard}
+        role="region"
+        aria-labelledby="lf-heading"
+      >
+        <div className={styles.loginCardInner}>
+          <h2 id="lf-heading" className={styles.loginTitle}>
             Sign in
           </h2>
-          <p className="login-sub">
+          <p className={styles.loginSub}>
             Enter your credentials to access your account.
           </p>
 
-          <form className="login-form" onSubmit={handleSubmit} noValidate>
+          <form className={styles.loginForm} onSubmit={handleSubmit} noValidate>
             {error && (
-              <div className="login-error" role="alert">
+              <div className={styles.loginError} role="alert">
                 {error}
               </div>
             )}
 
-            <label className="login-field">
-              <span className="login-label">Email</span>
+            <label className={styles.loginField}>
+              <span className={styles.loginLabel}>Email</span>
               <input
-                className="login-input"
+                className={styles.loginInput}
                 type="email"
                 inputMode="email"
                 placeholder="you@example.com"
@@ -286,12 +265,12 @@ export default function LoginForm() {
               />
             </label>
 
-            <label className="login-field">
-              <span className="login-label">Password</span>
+            <label className={styles.loginField}>
+              <span className={styles.loginLabel}>Password</span>
 
-              <div className="password-wrapper">
+              <div className={styles.passwordWrapper}>
                 <input
-                  className="login-input password-input"
+                  className={`${styles.loginInput} ${styles.passwordInput}`}
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   value={password}
@@ -302,36 +281,36 @@ export default function LoginForm() {
 
                 <button
                   type="button"
-                  className="password-toggle"
+                  className={styles.passwordToggle}
                   aria-label={showPassword ? "Hide password" : "Show password"}
                   onClick={() => setShowPassword((prev) => !prev)}
                 >
                   {showPassword ? (
-                    <EyeOff className="password-icon" size={20} />
+                    <EyeOff className={styles.passwordIcon} size={20} />
                   ) : (
-                    <Eye className="password-icon" size={20} />
+                    <Eye className={styles.passwordIcon} size={20} />
                   )}
                 </button>
               </div>
             </label>
 
             {/* CAPTCHA block */}
-            <div className="login-field captcha-field" aria-live="polite">
-              <span className="login-label">Captcha</span>
+            <div className={styles.captchaField} aria-live="polite">
+              <span className={styles.loginLabel}>Captcha</span>
 
-              <div className="captcha-row">
-                <div className="captcha-box" aria-hidden={captchaLoading}>
+              <div className={styles.captchaRow}>
+                <div className={styles.captchaBox} aria-hidden={captchaLoading}>
                   {captchaLoading ? (
-                    <div className="captcha-loading">Loading...</div>
+                    <div className={styles.captchaLoading}>Loading...</div>
                   ) : (
                     renderCaptcha()
                   )}
                 </div>
 
-                <div className="captcha-controls">
+                <div className={styles.captchaControls}>
                   <button
                     type="button"
-                    className="btn btn-ghost captcha-refresh"
+                    className={`btn btn-ghost ${styles.captchaRefresh}`}
                     aria-label="Refresh captcha"
                     onClick={fetchCaptcha}
                     disabled={captchaLoading}
@@ -342,7 +321,7 @@ export default function LoginForm() {
               </div>
 
               <input
-                className="login-input captcha-input"
+                className={`${styles.loginInput} ${styles.captchaInput}`}
                 type="text"
                 placeholder="Type the text you see"
                 value={captchaInput}
@@ -354,10 +333,10 @@ export default function LoginForm() {
               />
             </div>
 
-            <div className="login-row login-between">
+            <div className={`${styles.loginRow} ${styles.loginBetween}`}>
               <button
                 type="button"
-                className="login-link-btn"
+                className={styles.loginLinkBtn}
                 onClick={() => setShowForgotModal(true)}
               >
                 Forgot password?
@@ -365,20 +344,20 @@ export default function LoginForm() {
             </div>
 
             <button
-              className="btn btn-accent login-submit"
+              className={`btn btn-accent ${styles.loginSubmit}`}
               type="submit"
               disabled={loading || captchaLoading}
             >
               {loading ? "Signing in…" : "Sign in"}
             </button>
 
-            <div className="login-divider">
+            <div className={styles.loginDivider}>
               <span>or</span>
             </div>
 
-            <p className="login-signup">
+            <p className={styles.loginSignup}>
               New here?{" "}
-              <a className="login-link" href="/auth/register">
+              <a className={styles.loginLink} href="/auth/register">
                 Create an account
               </a>
             </p>

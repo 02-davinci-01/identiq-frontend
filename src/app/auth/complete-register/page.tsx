@@ -1,6 +1,6 @@
 // src/app/auth/complete-register/page.tsx
 import React from "react";
-import CompleteRegisterForm from "@/components/CompleteRegisterForm/CompleteRegisterForm";
+import CompleteRegisterForm from "@/components/Form/CompleteRegisterForm/CompleteRegisterForm";
 
 export const dynamic = "force-static";
 

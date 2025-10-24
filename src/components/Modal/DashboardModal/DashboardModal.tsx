@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, ReactNode } from "react";
 import ReactDOM from "react-dom";
-import styles from "./modal.module.css";
+import styles from "./dashboardModal.module.css";
 import axios, { AxiosInstance } from "axios";
 import { Eye, EyeOff } from "lucide-react";
 

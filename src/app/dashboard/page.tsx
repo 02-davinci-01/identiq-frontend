@@ -2,10 +2,9 @@
 "use client";
 
 import React, { useLayoutEffect, useEffect, useState } from "react";
-import ThemePreview from "@/components/Dashboard/ThemePreview";
-import Topbar from "@/components/Dashboard/Topbar";
+import ThemePreview from "@/components/Dashboard/ThemePreview/ThemePreview";
 import styles from "./styles/dashboard.module.css";
-import TypewriterText from "@/components/TypewriterText";
+import TypewriterText from "@/components/UI/TypewriterText/TypewriterText";
 import { useQueries } from "@tanstack/react-query";
 import { api, getToken } from "@/lib/api";
 import { useRouter } from "next/navigation";
@@ -366,7 +365,6 @@ export default function DashboardPage() {
     <div className={styles.dmRoot}>
       <SpinnerOverlay visible={spinnerVisible} />
 
-      <Topbar />
       <div className={styles.contentContainer}>
         <div className={styles.infoRow}>
           <div className={styles.welcome}>
