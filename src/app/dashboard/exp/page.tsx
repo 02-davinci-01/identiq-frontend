@@ -6,7 +6,7 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { GenericModal } from "@/components/Modal/Modal";
 import axios from "axios";
 
-/* Same THEMES array for reference */
+/* THEMES */
 const THEMES = [
   { id: "teal", label: "Teal", img: "/themeChange.webp", color: "#2f6f66" },
   { id: "light", label: "Light", img: "/themeChange.webp", color: "#c96a2b" },
@@ -88,6 +88,15 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Types for attempt log entries
+type AttemptStatus = "failed" | "passed" | "error";
+type AttemptLogEntry = {
+  attempt: number;
+  status: AttemptStatus;
+  message: string;
+  ts: string;
+};
+
 export default function UsersPage() {
   const [users, setUsers] = useState<
     {
@@ -106,6 +115,14 @@ export default function UsersPage() {
   const [deleting, setDeleting] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // retry UI state
+  const [triesCount, setTriesCount] = useState<number | null>(null);
+  const [fetchingExperimental, setFetchingExperimental] =
+    useState<boolean>(false);
+
+  // attempt log
+  const [attemptLog, setAttemptLog] = useState<AttemptLogEntry[]>([]);
+
   useEffect(() => {
     try {
       const storedId = localStorage.getItem(STORAGE_KEY);
@@ -120,53 +137,153 @@ export default function UsersPage() {
     } catch (e) {}
   }, []);
 
-  useEffect(() => {
-    let mounted = true;
-    async function loadUsers() {
-      setLoading(true);
+  // Generic delay helper
+  function delay(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Generic fetch-with-retries wrapper with onAttempt callback to capture each try.
+   */
+  async function fetchWithRetries<T>(
+    fetchFn: () => Promise<T>,
+    shouldStop: (result: T) => boolean,
+    options?: {
+      waitMs?: number;
+      maxAttempts?: number;
+      jitterMs?: number;
+      onAttempt?: (entry: AttemptLogEntry) => void;
+    }
+  ): Promise<{ data: T | null; attempts: number }> {
+    const waitMs = options?.waitMs ?? 700;
+    const jitterMs = options?.jitterMs ?? 300;
+    const maxAttempts = options?.maxAttempts ?? 100;
+
+    let attempts = 0;
+
+    while (attempts < maxAttempts) {
+      attempts += 1;
       try {
-        const res = await api.get("/users");
-        if (res.status === 401) {
-          window.location.href = "/auth/login";
-          return;
-        }
-        if (res.status >= 200 && res.status < 300) {
-          const payload = res.data;
-          if (Array.isArray(payload)) {
-            const mapped = payload.map((u: any) => {
-              const id =
-                u.id ?? u._id ?? u.email ?? String(Math.random()).slice(2);
-              const name = u.name ?? u.email ?? "Unknown";
-              const color = u.colorHex ?? "#c96a2b";
+        const result = await fetchFn();
+        const ok = shouldStop(result);
 
-              // Determine theme label from color
-              const themeLabel =
-                THEMES.find(
-                  (t) => t.color.toLowerCase() === color.toLowerCase()
-                )?.label ?? "Custom";
+        const entry: AttemptLogEntry = {
+          attempt: attempts,
+          status: ok ? "passed" : "failed",
+          message: ok
+            ? `received non-empty response`
+            : `empty or not-ready response`,
+          ts: new Date().toISOString(),
+        };
 
-              return {
-                id,
-                name,
-                theme: { name: themeLabel, color },
-                email: u.email,
-              };
-            });
-            if (mounted) setUsers(mapped);
-          }
+        options?.onAttempt?.(entry);
+
+        if (ok) {
+          return { data: result, attempts };
         }
-      } catch (err) {
-        console.error("Failed to fetch users", err);
-      } finally {
-        if (mounted) setLoading(false);
+
+        const extra = Math.floor(Math.random() * jitterMs);
+        await delay(waitMs + extra);
+      } catch (err: any) {
+        const entry: AttemptLogEntry = {
+          attempt: attempts,
+          status: "error",
+          message: err?.message ?? "unknown error",
+          ts: new Date().toISOString(),
+        };
+        options?.onAttempt?.(entry);
+
+        console.error("[fetchWithRetries] attempt failed:", attempts, err);
+        const extra = Math.floor(Math.random() * jitterMs);
+        await delay(waitMs + extra);
       }
     }
 
-    loadUsers();
+    return { data: null, attempts };
+  }
+
+  /**
+   * Calls the experimental endpoint repeatedly until the backend returns a non-empty array
+   * or until maxAttempts. Updates UI states and attemptLog accordingly.
+   */
+  useEffect(() => {
+    let mounted = true;
+    async function runExperimentalPoll() {
+      setLoading(true);
+      setFetchingExperimental(true);
+      setTriesCount(null);
+      setAttemptLog([]);
+
+      const endpoint = "/users/experimental";
+
+      const { data, attempts } = await fetchWithRetries<any[]>(
+        async () => {
+          const res = await api.get(endpoint);
+          return res.data;
+        },
+        (result) => Array.isArray(result) && result.length > 0,
+        {
+          waitMs: 600,
+          maxAttempts: 100,
+          jitterMs: 400,
+          onAttempt: (entry) => {
+            // append to attempt log in order
+            setAttemptLog((prev) => [...prev, entry]);
+          },
+        }
+      );
+
+      if (!mounted) return;
+
+      setTriesCount(attempts);
+
+      if (Array.isArray(data) && data.length > 0) {
+        const mapped = data.map((u: any) => {
+          const id = u.id ?? u._id ?? u.email ?? String(Math.random()).slice(2);
+          const name = u.name ?? u.email ?? "Unknown";
+          const color = u.colorHex ?? "#c96a2b";
+
+          const themeLabel =
+            THEMES.find((t) => t.color.toLowerCase() === color.toLowerCase())
+              ?.label ?? "Custom";
+
+          return {
+            id,
+            name,
+            theme: { name: themeLabel, color },
+            email: u.email,
+          };
+        });
+
+        setUsers(mapped);
+      } else {
+        setUsers([]);
+        console.warn(
+          `[Experimental] No users after ${attempts} attempts. Consider increasing maxAttempts or checking the backend.`
+        );
+      }
+
+      setLoading(false);
+      setFetchingExperimental(false);
+    }
+
+    runExperimentalPoll();
+
     return () => {
       mounted = false;
     };
   }, []);
+
+  // derived summary counts
+  const summary = useMemo(() => {
+    const s = { total: attemptLog.length, passed: 0, failed: 0, error: 0 };
+    attemptLog.forEach((a) => {
+      if (a.status === "passed") s.passed += 1;
+      else if (a.status === "failed") s.failed += 1;
+      else if (a.status === "error") s.error += 1;
+    });
+    return s;
+  }, [attemptLog]);
 
   const themeDistribution = useMemo(() => {
     const map = new Map<string, { count: number; color: string }>();
@@ -227,7 +344,7 @@ export default function UsersPage() {
   }
 
   return (
-    <div className={styles.contentContainer2}>
+    <div className={styles.contentContainer}>
       <div className={styles.infoRow} style={{ marginBottom: 18 }}>
         <div className={styles.welcome}>User Data</div>
         <div className={styles.count}>{users.length}</div>
@@ -318,10 +435,7 @@ export default function UsersPage() {
         </section>
 
         <aside>
-          <div
-            className={styles.themesCard}
-            style={{ height: 360, overflow: "hidden" }}
-          >
+          <div className={`${styles.themesCard} ${styles.expandableCard}`}>
             <h3 className={styles.themesCard_h3}>Theme distribution</h3>
             <div style={{ width: "100%", height: 240 }}>
               <ResponsiveContainer>
@@ -346,7 +460,7 @@ export default function UsersPage() {
             <div
               style={{
                 marginTop: 8,
-                maxHeight: 84,
+                maxHeight: 88,
                 overflowY: "auto",
                 paddingRight: 6,
               }}
@@ -374,6 +488,114 @@ export default function UsersPage() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* NEW: Summary and attempt log container */}
+            <div
+              style={{
+                marginTop: 12,
+                fontSize: 13,
+                padding: "8px 6px",
+                borderTop: "1px solid rgba(0,0,0,0.04)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 8,
+                }}
+              >
+                <div style={{ fontWeight: 600 }}>Experimental fetch</div>
+                <div style={{ fontSize: 12, color: "#666" }}>
+                  {fetchingExperimental
+                    ? "Running..."
+                    : triesCount != null
+                    ? "Finished"
+                    : "Idle"}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                <div style={{ fontSize: 12 }}>
+                  Total: <strong>{summary.total}</strong>
+                </div>
+                <div style={{ fontSize: 12, color: "green" }}>
+                  Passed: <strong>{summary.passed}</strong>
+                </div>
+                <div style={{ fontSize: 12, color: "#b85a2a" }}>
+                  Failed: <strong>{summary.failed}</strong>
+                </div>
+                <div style={{ fontSize: 12, color: "#c0392b" }}>
+                  Error: <strong>{summary.error}</strong>
+                </div>
+              </div>
+
+              <div
+                style={{ maxHeight: 280, overflowY: "auto", paddingRight: 6 }}
+              >
+                {attemptLog.length === 0 ? (
+                  <div style={{ fontSize: 13, color: "#666" }}>
+                    No attempts yet.
+                  </div>
+                ) : (
+                  attemptLog.map((a) => (
+                    <div
+                      key={a.attempt}
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        alignItems: "center",
+                        marginBottom: 6,
+                      }}
+                    >
+                      <div
+                        style={{
+                          minWidth: 36,
+                          textAlign: "center",
+                          padding: "4px 6px",
+                          borderRadius: 6,
+                          background:
+                            a.status === "passed"
+                              ? "rgba(0,128,0,0.08)"
+                              : a.status === "failed"
+                              ? "rgba(184,90,42,0.06)"
+                              : "rgba(192,57,43,0.06)",
+                          color:
+                            a.status === "passed"
+                              ? "green"
+                              : a.status === "failed"
+                              ? "#b85a2a"
+                              : "#c0392b",
+                          fontWeight: 700,
+                          fontSize: 12,
+                        }}
+                      >
+                        #{a.attempt}
+                      </div>
+                      <div style={{ fontSize: 13 }}>
+                        <div style={{ fontWeight: 600, marginBottom: 2 }}>
+                          {a.status.toUpperCase()}
+                        </div>
+                        <div style={{ fontSize: 12, color: "#555" }}>
+                          {a.message} • {new Date(a.ts).toLocaleTimeString()}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div style={{ marginTop: 8, fontSize: 12, color: "#666" }}>
+                {fetchingExperimental
+                  ? `Tries so far: ${triesCount ?? summary.total}`
+                  : triesCount != null
+                  ? `Satisfied after ${triesCount} ${
+                      triesCount === 1 ? "try" : "tries"
+                    }.`
+                  : "Not started"}
+              </div>
             </div>
           </div>
         </aside>

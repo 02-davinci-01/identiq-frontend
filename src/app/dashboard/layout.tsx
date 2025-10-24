@@ -1,4 +1,3 @@
-// app/dashboard/layout.tsx
 import React from "react";
 import Topbar from "@/components/Dashboard/Topbar";
 import Sidebar from "@/components/Dashboard/Sidebar";
@@ -11,15 +10,12 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className={styles.dmRoot} suppressHydrationWarning>
+    <div className={styles.dmRoot}>
       <Topbar />
-      <div className={styles.dmBody}>
-        <Sidebar />
-        {/* Wrap the dashboard children in a client-side Providers so react-query is available */}
-        <main className={styles.dmMain}>
-          <Providers>{children}</Providers>
-        </main>
-      </div>
+      <Sidebar />
+      <main className={styles.dmMain}>
+        <Providers>{children}</Providers>
+      </main>
     </div>
   );
 }
