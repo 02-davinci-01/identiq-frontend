@@ -63,7 +63,8 @@ function applyThemeVars(baseHex: string) {
   root.setProperty("--top-left-bg-2", adjustLightness(baseHex, 0.08));
 }
 
-const BACKEND_BASE = process.env.NEXT_PUBLIC_API_URL || "https://localhost:3001";
+const BACKEND_BASE =
+  process.env.NEXT_PUBLIC_API_URL || "https://localhost:3001";
 const api = axios.create({
   baseURL: BACKEND_BASE,
   timeout: 10_000,
@@ -89,7 +90,12 @@ api.interceptors.request.use((config) => {
 
 export default function UsersPage() {
   const [users, setUsers] = useState<
-    { id: string; name: string; theme: { name: string; color: string }; email?: string }[]
+    {
+      id: string;
+      name: string;
+      theme: { name: string; color: string };
+      email?: string;
+    }[]
   >([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [pendingUser, setPendingUser] = useState<{
@@ -128,14 +134,16 @@ export default function UsersPage() {
           const payload = res.data;
           if (Array.isArray(payload)) {
             const mapped = payload.map((u: any) => {
-              const id = u.id ?? u._id ?? u.email ?? String(Math.random()).slice(2);
+              const id =
+                u.id ?? u._id ?? u.email ?? String(Math.random()).slice(2);
               const name = u.name ?? u.email ?? "Unknown";
               const color = u.colorHex ?? "#c96a2b";
 
               // Determine theme label from color
               const themeLabel =
-                THEMES.find((t) => t.color.toLowerCase() === color.toLowerCase())
-                  ?.label ?? "Custom";
+                THEMES.find(
+                  (t) => t.color.toLowerCase() === color.toLowerCase()
+                )?.label ?? "Custom";
 
               return {
                 id,
@@ -196,17 +204,23 @@ export default function UsersPage() {
         throw new Error("User email missing — cannot delete.");
       }
 
-      const res = await api.delete("/users", { data: { email: emailToDelete } });
+      const res = await api.delete("/users", {
+        data: { email: emailToDelete },
+      });
       if (res.status >= 200 && res.status < 300) {
         setModalOpen(false);
         setPendingUser(null);
       } else {
         setUsers(prev);
-        alert(res.data?.message ?? "Failed to delete user on server. Rolling back.");
+        alert(
+          res.data?.message ?? "Failed to delete user on server. Rolling back."
+        );
       }
     } catch (e) {
       setUsers(prev);
-      alert((e as any)?.message ?? "Failed to delete user on server. Rolling back.");
+      alert(
+        (e as any)?.message ?? "Failed to delete user on server. Rolling back."
+      );
     } finally {
       setDeleting(false);
     }
@@ -220,7 +234,9 @@ export default function UsersPage() {
         <div className={styles.date}>{new Date().toLocaleDateString()}</div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 20 }}>
+      <div
+        style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 20 }}
+      >
         <section>
           <div className={styles.themesCard}>
             <h3 className={styles.themesCard_h3}>Users</h3>
@@ -240,10 +256,21 @@ export default function UsersPage() {
               </thead>
               <tbody>
                 {users.map((u) => (
-                  <tr key={u.id} style={{ borderBottom: "1px solid rgba(0,0,0,0.03)" }}>
-                    <td style={{ padding: "12px 8px", fontWeight: 700 }}>{u.name}</td>
+                  <tr
+                    key={u.id}
+                    style={{ borderBottom: "1px solid rgba(0,0,0,0.03)" }}
+                  >
+                    <td style={{ padding: "12px 8px", fontWeight: 700 }}>
+                      {u.name}
+                    </td>
                     <td style={{ padding: "12px 8px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                        }}
+                      >
                         <div
                           style={{
                             width: 28,
@@ -291,7 +318,10 @@ export default function UsersPage() {
         </section>
 
         <aside>
-          <div className={styles.themesCard} style={{ height: 360, overflow: "hidden" }}>
+          <div
+            className={styles.themesCard}
+            style={{ height: 360, overflow: "hidden" }}
+          >
             <h3 className={styles.themesCard_h3}>Theme distribution</h3>
             <div style={{ width: "100%", height: 240 }}>
               <ResponsiveContainer>
@@ -313,10 +343,32 @@ export default function UsersPage() {
               </ResponsiveContainer>
             </div>
 
-            <div style={{ marginTop: 8, maxHeight: 84, overflowY: "auto", paddingRight: 6 }}>
+            <div
+              style={{
+                marginTop: 8,
+                maxHeight: 84,
+                overflowY: "auto",
+                paddingRight: 6,
+              }}
+            >
               {themeDistribution.map((t) => (
-                <div key={t.name} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                  <div style={{ width: 12, height: 12, background: t.color, borderRadius: 3 }} />
+                <div
+                  key={t.name}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    marginBottom: 6,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 12,
+                      height: 12,
+                      background: t.color,
+                      borderRadius: 3,
+                    }}
+                  />
                   <div style={{ fontSize: 13 }}>
                     {t.name} — {t.value}
                   </div>
@@ -339,10 +391,19 @@ export default function UsersPage() {
       >
         <div style={{ padding: "6px 0" }}>
           <p style={{ margin: 0, fontSize: 15 }}>
-            {pendingUser ? `Do you want to delete ${pendingUser.name} account?` : "Do you want to delete this account?"}
+            {pendingUser
+              ? `Do you want to delete ${pendingUser.name} account?`
+              : "Do you want to delete this account?"}
           </p>
 
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 18 }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              justifyContent: "flex-end",
+              marginTop: 18,
+            }}
+          >
             <button
               className={styles.btnSmall}
               onClick={() => {

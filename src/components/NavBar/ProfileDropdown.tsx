@@ -172,8 +172,9 @@ export default function ProfileDropdown(): JSX.Element {
         };
         if (token) headers["Authorization"] = `Bearer ${token}`;
 
+        // <-- WIRED UP: POST to /auth/request-email-change with { newEmail }
         const emailRes = await api.post(
-          "/auth/email",
+          "/auth/request-email-change",
           { newEmail: email.trim() },
           { headers }
         );

@@ -10,7 +10,7 @@
 :root {
   --font-primary: var(--font-ibm-plex-mono, "Courier New", Courier, monospace);
   --font-secondary: var(--font-josefin-sans, "Josefin Sans", sans-serif);
-   /* transition: background-color 0.4s ease, color 0.4s ease, 
+  /* transition: background-color 0.4s ease, color 0.4s ease, 
               var(--accent) 0.4s ease, var(--header-bg) 0.4s ease; */
 
   --bg-page: #ffffff;
@@ -140,7 +140,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 80px 24px 48px;
+  padding: 96px 24px 48px;
   width: 100%;
   overflow-x: hidden;
 }
