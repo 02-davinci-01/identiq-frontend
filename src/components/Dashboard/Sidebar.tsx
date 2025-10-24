@@ -30,6 +30,9 @@ export default function Sidebar() {
       <nav className={styles.nav}>
         <SidebarItem href="/dashboard">Dashboard</SidebarItem>
         <SidebarItem href="/dashboard/users">Users</SidebarItem>
+
+        {/* NEW: Experimental page link added */}
+        <SidebarItem href="/dashboard/experimental">Experimental</SidebarItem>
       </nav>
 
       <div className={styles.sbFooter}>

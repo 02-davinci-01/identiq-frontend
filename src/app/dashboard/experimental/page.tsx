@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import styles from "@/app/dashboard/styles/dashboard.module.css";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { GenericModal } from "@/components/Modal/Modal";
 import axios from "axios";
 
-/* THEMES */
+/* THEMES (kept the same) */
 const THEMES = [
   { id: "teal", label: "Teal", img: "/themeChange.webp", color: "#2f6f66" },
   { id: "light", label: "Light", img: "/themeChange.webp", color: "#c96a2b" },
@@ -70,7 +70,6 @@ const api = axios.create({
   timeout: 10_000,
   validateStatus: (s) => s >= 200 && s < 500,
 });
-
 api.interceptors.request.use((config) => {
   try {
     const token =
@@ -88,7 +87,7 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Types for attempt log entries
+// Types
 type AttemptStatus = "failed" | "passed" | "error";
 type AttemptLogEntry = {
   attempt: number;
@@ -97,7 +96,7 @@ type AttemptLogEntry = {
   ts: string;
 };
 
-export default function UsersPage() {
+export default function ExperimentalPage() {
   const [users, setUsers] = useState<
     {
       id: string;
@@ -113,16 +112,20 @@ export default function UsersPage() {
     email?: string;
   } | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [loading, setLoading] = useState(true);
 
-  // retry UI state
+  // pagination & sentinel control
+  const [limit] = useState<number>(4); // page size
+  const [offset, setOffset] = useState<number>(0);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+
+  // retry / attempt UI
+  const [fetching, setFetching] = useState(false);
   const [triesCount, setTriesCount] = useState<number | null>(null);
-  const [fetchingExperimental, setFetchingExperimental] =
-    useState<boolean>(false);
-
-  // attempt log
   const [attemptLog, setAttemptLog] = useState<AttemptLogEntry[]>([]);
+  const [exhausted, setExhausted] = useState(false); // no more pages
 
+  // apply saved theme on mount so theme changes affect this page
   useEffect(() => {
     try {
       const storedId = localStorage.getItem(STORAGE_KEY);
@@ -137,14 +140,10 @@ export default function UsersPage() {
     } catch (e) {}
   }, []);
 
-  // Generic delay helper
   function delay(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  /**
-   * Generic fetch-with-retries wrapper with onAttempt callback to capture each try.
-   */
   async function fetchWithRetries<T>(
     fetchFn: () => Promise<T>,
     shouldStop: (result: T) => boolean,
@@ -155,9 +154,9 @@ export default function UsersPage() {
       onAttempt?: (entry: AttemptLogEntry) => void;
     }
   ): Promise<{ data: T | null; attempts: number }> {
-    const waitMs = options?.waitMs ?? 700;
+    const waitMs = options?.waitMs ?? 600;
     const jitterMs = options?.jitterMs ?? 300;
-    const maxAttempts = options?.maxAttempts ?? 100;
+    const maxAttempts = options?.maxAttempts ?? 50;
 
     let attempts = 0;
 
@@ -170,17 +169,12 @@ export default function UsersPage() {
         const entry: AttemptLogEntry = {
           attempt: attempts,
           status: ok ? "passed" : "failed",
-          message: ok
-            ? `received non-empty response`
-            : `empty or not-ready response`,
+          message: ok ? "received non-empty response" : "empty / not ready",
           ts: new Date().toISOString(),
         };
-
         options?.onAttempt?.(entry);
 
-        if (ok) {
-          return { data: result, attempts };
-        }
+        if (ok) return { data: result, attempts };
 
         const extra = Math.floor(Math.random() * jitterMs);
         await delay(waitMs + extra);
@@ -199,82 +193,97 @@ export default function UsersPage() {
       }
     }
 
-    return { data: null, attempts };
+    return { data: null, attempts: attempts };
   }
 
-  /**
-   * Calls the experimental endpoint repeatedly until the backend returns a non-empty array
-   * or until maxAttempts. Updates UI states and attemptLog accordingly.
-   */
-  useEffect(() => {
-    let mounted = true;
-    async function runExperimentalPoll() {
-      setLoading(true);
-      setFetchingExperimental(true);
-      setTriesCount(null);
-      setAttemptLog([]);
+  async function loadNextPage() {
+    if (fetching || exhausted) return;
+    setFetching(true);
+    setTriesCount(null);
 
-      const endpoint = "/users/experimental";
+    const pageOffset = offset;
+    const pageLimit = limit;
 
-      const { data, attempts } = await fetchWithRetries<any[]>(
-        async () => {
-          const res = await api.get(endpoint);
-          return res.data;
+    const endpoint = `/users/experimental?limit=${pageLimit}&offset=${pageOffset}`;
+
+    const { data, attempts } = await fetchWithRetries<any[]>(
+      async () => {
+        const res = await api.get(endpoint);
+        return res.data;
+      },
+      (result) => Array.isArray(result) && result.length > 0,
+      {
+        waitMs: 600,
+        maxAttempts: 50,
+        jitterMs: 400,
+        onAttempt: (entry) => {
+          setAttemptLog((prev) => [...prev, entry]);
         },
-        (result) => Array.isArray(result) && result.length > 0,
-        {
-          waitMs: 600,
-          maxAttempts: 100,
-          jitterMs: 400,
-          onAttempt: (entry) => {
-            // append to attempt log in order
-            setAttemptLog((prev) => [...prev, entry]);
-          },
-        }
-      );
-
-      if (!mounted) return;
-
-      setTriesCount(attempts);
-
-      if (Array.isArray(data) && data.length > 0) {
-        const mapped = data.map((u: any) => {
-          const id = u.id ?? u._id ?? u.email ?? String(Math.random()).slice(2);
-          const name = u.name ?? u.email ?? "Unknown";
-          const color = u.colorHex ?? "#c96a2b";
-
-          const themeLabel =
-            THEMES.find((t) => t.color.toLowerCase() === color.toLowerCase())
-              ?.label ?? "Custom";
-
-          return {
-            id,
-            name,
-            theme: { name: themeLabel, color },
-            email: u.email,
-          };
-        });
-
-        setUsers(mapped);
-      } else {
-        setUsers([]);
-        console.warn(
-          `[Experimental] No users after ${attempts} attempts. Consider increasing maxAttempts or checking the backend.`
-        );
       }
+    );
 
-      setLoading(false);
-      setFetchingExperimental(false);
+    setTriesCount(attempts);
+
+    if (Array.isArray(data) && data.length > 0) {
+      const mapped = data.map((u: any) => {
+        const id = u.id ?? u._id ?? u.email ?? String(Math.random()).slice(2);
+        const name = u.name ?? u.email ?? "Unknown";
+        const color = u.colorHex ?? "#c96a2b";
+
+        const themeLabel =
+          THEMES.find((t) => t.color.toLowerCase() === color.toLowerCase())
+            ?.label ?? "Custom";
+
+        return {
+          id,
+          name,
+          theme: { name: themeLabel, color },
+          email: u.email,
+        };
+      });
+
+      setUsers((prev) => [...prev, ...mapped]);
+      setOffset((prev) => prev + mapped.length);
+
+      if (mapped.length < pageLimit) {
+        setExhausted(true);
+      }
+    } else {
+      console.warn(
+        `[Experimental] No data for page offset ${pageOffset} after ${attempts} attempts`
+      );
+      setExhausted(true);
     }
 
-    runExperimentalPoll();
+    setFetching(false);
+  }
+
+  // IntersectionObserver set up
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            loadNextPage().catch((e) => console.error("loadNextPage error", e));
+          }
+        });
+      },
+      { root: null, rootMargin: "0px", threshold: 0.25 }
+    );
+
+    observerRef.current.observe(sentinel);
 
     return () => {
-      mounted = false;
+      if (observerRef.current && sentinel)
+        observerRef.current.unobserve(sentinel);
+      observerRef.current = null;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sentinelRef.current, offset, fetching, exhausted]);
 
-  // derived summary counts
   const summary = useMemo(() => {
     const s = { total: attemptLog.length, passed: 0, failed: 0, error: 0 };
     attemptLog.forEach((a) => {
@@ -346,7 +355,7 @@ export default function UsersPage() {
   return (
     <div className={styles.contentContainer}>
       <div className={styles.infoRow} style={{ marginBottom: 18 }}>
-        <div className={styles.welcome}>User Data</div>
+        <div className={styles.welcome}>Experimental Users</div>
         <div className={styles.count}>{users.length}</div>
         <div className={styles.date}>{new Date().toLocaleDateString()}</div>
       </div>
@@ -415,22 +424,51 @@ export default function UsersPage() {
                     </td>
                   </tr>
                 ))}
-                {loading && users.length === 0 && (
+
+                {users.length === 0 && (
                   <tr>
                     <td colSpan={3} style={{ padding: 12 }}>
-                      Loading...
-                    </td>
-                  </tr>
-                )}
-                {!loading && users.length === 0 && (
-                  <tr>
-                    <td colSpan={3} style={{ padding: 12 }}>
-                      No users found.
+                      {fetching
+                        ? "Waiting for experimental data..."
+                        : "No users loaded yet. Scroll to trigger load."}
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
+
+            {/* sentinel */}
+            <div ref={sentinelRef} style={{ height: 1 }} />
+
+            {/* spinner for loading more */}
+            {fetching && users.length >= limit && (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  padding: 12,
+                }}
+              >
+                <div className={styles.spinner} aria-hidden="true" />
+                <div style={{ marginTop: 8, color: "rgba(0,0,0,0.6)" }}>
+                  Loading more...
+                </div>
+              </div>
+            )}
+
+            <div style={{ padding: 12, fontSize: 13, color: "#666" }}>
+              {fetching ? (
+                <div>
+                  Loading page at offset {offset}... (tries for this page:{" "}
+                  {triesCount ?? "—"})
+                </div>
+              ) : exhausted ? (
+                <div>No more pages (exhausted).</div>
+              ) : (
+                <div>Scroll to load more users.</div>
+              )}
+            </div>
           </div>
         </section>
 
@@ -490,7 +528,6 @@ export default function UsersPage() {
               ))}
             </div>
 
-            {/* NEW: Summary and attempt log container */}
             <div
               style={{
                 marginTop: 12,
@@ -509,17 +546,13 @@ export default function UsersPage() {
               >
                 <div style={{ fontWeight: 600 }}>Experimental fetch</div>
                 <div style={{ fontSize: 12, color: "#666" }}>
-                  {fetchingExperimental
-                    ? "Running..."
-                    : triesCount != null
-                    ? "Finished"
-                    : "Idle"}
+                  {fetching ? "Running..." : exhausted ? "Stopped" : "Idle"}
                 </div>
               </div>
 
               <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                 <div style={{ fontSize: 12 }}>
-                  Total: <strong>{summary.total}</strong>
+                  Total attempts: <strong>{summary.total}</strong>
                 </div>
                 <div style={{ fontSize: 12, color: "green" }}>
                   Passed: <strong>{summary.passed}</strong>
@@ -533,7 +566,7 @@ export default function UsersPage() {
               </div>
 
               <div
-                style={{ maxHeight: 280, overflowY: "auto", paddingRight: 6 }}
+                style={{ maxHeight: 240, overflowY: "auto", paddingRight: 6 }}
               >
                 {attemptLog.length === 0 ? (
                   <div style={{ fontSize: 13, color: "#666" }}>
@@ -542,7 +575,7 @@ export default function UsersPage() {
                 ) : (
                   attemptLog.map((a) => (
                     <div
-                      key={a.attempt}
+                      key={`${a.attempt}-${a.ts}`}
                       style={{
                         display: "flex",
                         gap: 8,
@@ -571,9 +604,7 @@ export default function UsersPage() {
                           fontWeight: 700,
                           fontSize: 12,
                         }}
-                      >
-                        #{a.attempt}
-                      </div>
+                      >{`#${a.attempt}`}</div>
                       <div style={{ fontSize: 13 }}>
                         <div style={{ fontWeight: 600, marginBottom: 2 }}>
                           {a.status.toUpperCase()}
@@ -588,13 +619,13 @@ export default function UsersPage() {
               </div>
 
               <div style={{ marginTop: 8, fontSize: 12, color: "#666" }}>
-                {fetchingExperimental
-                  ? `Tries so far: ${triesCount ?? summary.total}`
+                {fetching
+                  ? `Tries so far for page: ${triesCount ?? summary.total}`
                   : triesCount != null
-                  ? `Satisfied after ${triesCount} ${
+                  ? `Last page satisfied after ${triesCount} ${
                       triesCount === 1 ? "try" : "tries"
                     }.`
-                  : "Not started"}
+                  : "No page loaded yet."}
               </div>
             </div>
           </div>

@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import styles from "@/app/dashboard/styles/dashboard.module.css";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { GenericModal } from "@/components/Modal/Modal";
 import axios from "axios";
 
-/* Same THEMES array for reference */
+/* THEMES */
 const THEMES = [
   { id: "teal", label: "Teal", img: "/themeChange.webp", color: "#2f6f66" },
   { id: "light", label: "Light", img: "/themeChange.webp", color: "#c96a2b" },
@@ -88,15 +88,81 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+/* ---------- Helpers ---------- */
+function findScrollParent(el?: Element | null): Element | null {
+  if (!el) return null;
+  let cur: Element | null = el;
+  while (cur) {
+    const style = window.getComputedStyle(cur);
+    const overflowY = style.overflowY;
+    if (overflowY === "auto" || overflowY === "scroll") return cur;
+    cur = cur.parentElement;
+  }
+  return null;
+}
+
+/* Try to determine logged-in user's id/email from localStorage (best-effort) */
+function getCurrentUserIdentifiers() {
+  if (typeof window === "undefined")
+    return { id: null as string | null, email: null as string | null };
+
+  const keysToTry = [
+    "user",
+    "currentUser",
+    "me",
+    "profile",
+    "authUser",
+    "user_profile",
+    "user_email",
+    "email",
+    "user_id",
+    "id",
+    "uid",
+  ];
+
+  let id: string | null = null;
+  let email: string | null = null;
+
+  for (const key of keysToTry) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      if (raw.trim().startsWith("{") || raw.trim().startsWith("[")) {
+        const parsed = JSON.parse(raw);
+        if (!id && (parsed.id || parsed._id || parsed.userId || parsed.uid)) {
+          id = String(parsed.id ?? parsed._id ?? parsed.userId ?? parsed.uid);
+        }
+        if (
+          !email &&
+          (parsed.email || parsed.emailAddress || parsed.userEmail)
+        ) {
+          email = String(
+            parsed.email ?? parsed.emailAddress ?? parsed.userEmail
+          );
+        }
+      } else {
+        if (!email && raw.includes("@")) email = raw;
+        else if (!id) id = raw;
+      }
+    } catch (e) {
+      continue;
+    }
+  }
+
+  return { id, email };
+}
+
+/* ---------- Component ---------- */
 export default function UsersPage() {
-  const [users, setUsers] = useState<
-    {
-      id: string;
-      name: string;
-      theme: { name: string; color: string };
-      email?: string;
-    }[]
-  >([]);
+  type User = {
+    id: string;
+    name: string;
+    theme: { name: string; color: string };
+    email?: string;
+  };
+
+  // data + delete modal
+  const [users, setUsers] = useState<User[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [pendingUser, setPendingUser] = useState<{
     id: string;
@@ -104,8 +170,27 @@ export default function UsersPage() {
     email?: string;
   } | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [loading, setLoading] = useState(true);
 
+  // infinite scroll / paging
+  const PAGE_LIMIT = 6;
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingInitial, setLoadingInitial] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+
+  // timer + auto refetch
+  const TIMER_DEFAULT = 30;
+  const [secondsLeft, setSecondsLeft] = useState<number>(TIMER_DEFAULT);
+  const intervalRef = useRef<number | null>(null);
+
+  // logged-in user identifiers
+  const currentUser = useRef<{ id: string | null; email: string | null }>(
+    getCurrentUserIdentifiers()
+  );
+
+  // theme apply
   useEffect(() => {
     try {
       const storedId = localStorage.getItem(STORAGE_KEY);
@@ -120,71 +205,163 @@ export default function UsersPage() {
     } catch (e) {}
   }, []);
 
-  useEffect(() => {
-    let mounted = true;
-    async function loadUsers() {
-      setLoading(true);
-      try {
-        const res = await api.get("/users");
-        if (res.status === 401) {
-          window.location.href = "/auth/login";
-          return;
-        }
-        if (res.status >= 200 && res.status < 300) {
-          const payload = res.data;
-          if (Array.isArray(payload)) {
-            const mapped = payload.map((u: any) => {
-              const id =
-                u.id ?? u._id ?? u.email ?? String(Math.random()).slice(2);
-              const name = u.name ?? u.email ?? "Unknown";
-              const color = u.colorHex ?? "#c96a2b";
+  /* ---------- fetch page function ---------- */
+  async function fetchPage(pageOffset: number, append = false) {
+    if (!append) setLoadingInitial(true);
+    else setLoadingMore(true);
 
-              // Determine theme label from color
-              const themeLabel =
-                THEMES.find(
-                  (t) => t.color.toLowerCase() === color.toLowerCase()
-                )?.label ?? "Custom";
+    try {
+      const res = await api.get("/users", {
+        params: { limit: PAGE_LIMIT, offset: pageOffset },
+      });
 
-              return {
-                id,
-                name,
-                theme: { name: themeLabel, color },
-                email: u.email,
-              };
-            });
-            if (mounted) setUsers(mapped);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to fetch users", err);
-      } finally {
-        if (mounted) setLoading(false);
+      if (res.status === 401) {
+        window.location.href = "/auth/login";
+        return;
       }
+
+      if (Array.isArray(res.data)) {
+        const mapped = res.data.map((u: any) => {
+          const id = u.id ?? u._id ?? u.email ?? String(Math.random()).slice(2);
+          const name = u.name ?? u.email ?? "Unknown";
+          const color = u.colorHex ?? "#c96a2b";
+          const themeLabel =
+            THEMES.find(
+              (t) => t.color.toLowerCase() === (color || "").toLowerCase()
+            )?.label ?? "Custom";
+          return {
+            id,
+            name,
+            theme: { name: themeLabel, color },
+            email: u.email,
+          };
+        });
+
+        if (append) {
+          setUsers((prev) => {
+            const existingIds = new Set(prev.map((p) => p.id));
+            const toAppend = mapped.filter((m) => !existingIds.has(m.id));
+            return [...prev, ...toAppend];
+          });
+        } else {
+          setUsers(mapped);
+        }
+
+        if (mapped.length < PAGE_LIMIT) {
+          setHasMore(false);
+        } else {
+          setHasMore(true);
+        }
+      } else {
+        setHasMore(false);
+      }
+    } catch (err) {
+      console.error("Failed to fetch users", err);
+    } finally {
+      setLoadingInitial(false);
+      setLoadingMore(false);
+    }
+  }
+
+  // initial load (explicitly only first 6)
+  useEffect(() => {
+    setOffset(0);
+    setHasMore(true);
+    fetchPage(0, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* ---------- IntersectionObserver for infinite scroll ----------
+     Only trigger load-more when there are already at least PAGE_LIMIT items rendered.
+     This prevents the observer from loading the second page immediately on first render.
+  */
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const scrollParent = findScrollParent(sentinel) || null;
+
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
     }
 
-    loadUsers();
+    const obs = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (
+            entry.isIntersecting &&
+            hasMore &&
+            !loadingMore &&
+            !loadingInitial &&
+            users.length >= PAGE_LIMIT // <-- guard to avoid immediate second fetch
+          ) {
+            const nextOffset = offset + PAGE_LIMIT;
+            setOffset(nextOffset);
+            fetchPage(nextOffset, true);
+          }
+        });
+      },
+      {
+        root: scrollParent,
+        rootMargin: "0px 0px 200px 0px",
+        threshold: 0.1,
+      }
+    );
+
+    obs.observe(sentinel);
+    observerRef.current = obs;
+
     return () => {
-      mounted = false;
+      obs.disconnect();
+      observerRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    sentinelRef.current,
+    hasMore,
+    loadingMore,
+    loadingInitial,
+    offset,
+    users.length,
+  ]);
+
+  /* ---------- Timer for auto-refetch ---------- */
+  useEffect(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    intervalRef.current = window.setInterval(() => {
+      setSecondsLeft((s) => {
+        if (s <= 1) {
+          // reset to first page and fetch fresh
+          setOffset(0);
+          setHasMore(true);
+          fetchPage(0, false);
+          return TIMER_DEFAULT;
+        }
+        return s - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     };
   }, []);
 
-  const themeDistribution = useMemo(() => {
-    const map = new Map<string, { count: number; color: string }>();
-    users.forEach((u) => {
-      const key = u.theme.name;
-      if (!map.has(key)) {
-        map.set(key, { count: 0, color: u.theme.color });
-      }
-      map.get(key)!.count += 1;
-    });
+  function handleManualRefresh() {
+    setSecondsLeft(TIMER_DEFAULT);
+    setOffset(0);
+    setHasMore(true);
+    fetchPage(0, false);
+  }
 
-    return Array.from(map.entries()).map(([name, obj]) => ({
-      name,
-      value: obj.count,
-      color: obj.color,
-    }));
-  }, [users]);
-
+  /* ---------- Delete flow (hide delete for current user - now blank) ---------- */
   function openDeleteModal(id: string) {
     const user = users.find((u) => u.id === id);
     if (!user) return;
@@ -226,12 +403,113 @@ export default function UsersPage() {
     }
   }
 
+  /* ---------- Derived data (theme distribution) ---------- */
+  const themeDistribution = useMemo(() => {
+    const map = new Map<string, { count: number; color: string }>();
+    users.forEach((u) => {
+      const key = u.theme.name;
+      if (!map.has(key)) {
+        map.set(key, { count: 0, color: u.theme.color });
+      }
+      map.get(key)!.count += 1;
+    });
+
+    return Array.from(map.entries()).map(([name, obj]) => ({
+      name,
+      value: obj.count,
+      color: obj.color,
+    }));
+  }, [users]);
+
+  /* ---------- Helpers for rendering decisions ---------- */
+  const isCurrentUser = (u: User) => {
+    const idMatch =
+      currentUser.current.id && u.id && currentUser.current.id === u.id;
+    const emailMatch =
+      currentUser.current.email &&
+      u.email &&
+      currentUser.current.email === u.email;
+    return Boolean(idMatch || emailMatch);
+  };
+
+  /* ---------- Inline spinner styles ---------- */
+  const spinnerStyle: React.CSSProperties = {
+    width: 36,
+    height: 36,
+    borderRadius: "50%",
+    border: "4px solid rgba(0,0,0,0.08)",
+    borderTopColor: "var(--accent)",
+    animation: "rotate 0.9s linear infinite",
+    margin: "10px auto",
+  };
+
+  const spinnerKeyframes = `
+    @keyframes rotate {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  `;
+
   return (
     <div className={styles.contentContainer2}>
-      <div className={styles.infoRow} style={{ marginBottom: 18 }}>
+      {/* inject keyframes */}
+      <style>{spinnerKeyframes}</style>
+
+      <div
+        className={styles.infoRow}
+        style={{ marginBottom: 18, alignItems: "center" }}
+      >
         <div className={styles.welcome}>User Data</div>
         <div className={styles.count}>{users.length}</div>
         <div className={styles.date}>{new Date().toLocaleDateString()}</div>
+
+        {/* Timer + Refresh */}
+        <div
+          style={{
+            marginLeft: "auto",
+            display: "flex",
+            gap: 12,
+            alignItems: "center",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "6px 10px",
+              borderRadius: 8,
+              background: "rgba(0,0,0,0.04)",
+              fontWeight: 700,
+            }}
+            title="Auto refresh timer"
+          >
+            <span style={{ fontSize: 13 }}>Refresh in</span>
+            <span
+              style={{
+                minWidth: 36,
+                textAlign: "center",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {secondsLeft}s
+            </span>
+          </div>
+
+          <button
+            onClick={handleManualRefresh}
+            className={styles.btnSmall}
+            style={{
+              background: "var(--accent)",
+              boxShadow: "none",
+              color: "#fff",
+            }}
+            title="Refetch users now"
+            disabled={loadingInitial || loadingMore}
+          >
+            {loadingInitial ? "Loading..." : "Refresh"}
+          </button>
+        </div>
       </div>
 
       <div
@@ -284,28 +562,37 @@ export default function UsersPage() {
                       </div>
                     </td>
                     <td style={{ padding: "12px 8px" }}>
-                      <button
-                        onClick={() => openDeleteModal(u.id)}
-                        className={styles.btnSmall}
-                        style={{
-                          background: "#ad2f2f",
-                          boxShadow: "none",
-                          color: "#fff",
-                        }}
-                      >
-                        Delete
-                      </button>
+                      {/* hide the action entirely for the logged-in user */}
+                      {!isCurrentUser(u) ? (
+                        <button
+                          onClick={() => openDeleteModal(u.id)}
+                          className={styles.btnSmall}
+                          style={{
+                            background: "#ad2f2f",
+                            boxShadow: "none",
+                            color: "#fff",
+                          }}
+                        >
+                          Delete
+                        </button>
+                      ) : (
+                        <></>
+                      )}
                     </td>
                   </tr>
                 ))}
-                {loading && users.length === 0 && (
+
+                {/* show when initial loading and no items yet */}
+                {loadingInitial && users.length === 0 && (
                   <tr>
                     <td colSpan={3} style={{ padding: 12 }}>
                       Loading...
                     </td>
                   </tr>
                 )}
-                {!loading && users.length === 0 && (
+
+                {/* show when not loading and no users */}
+                {!loadingInitial && users.length === 0 && (
                   <tr>
                     <td colSpan={3} style={{ padding: 12 }}>
                       No users found.
@@ -314,6 +601,52 @@ export default function UsersPage() {
                 )}
               </tbody>
             </table>
+
+            {/* sentinel for IntersectionObserver */}
+            <div ref={sentinelRef} />
+
+            {/* spinner shown when loading MORE and there are at least PAGE_LIMIT items already */}
+            {loadingMore && users.length >= PAGE_LIMIT && (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  padding: 12,
+                }}
+              >
+                <div style={spinnerStyle} aria-hidden="true" />
+                <div style={{ marginTop: 8, color: "rgba(0,0,0,0.6)" }}>
+                  Loading more...
+                </div>
+              </div>
+            )}
+
+            {/* fallback textual loading more when small list */}
+            {loadingMore && users.length < PAGE_LIMIT && (
+              <div
+                style={{
+                  padding: 12,
+                  textAlign: "center",
+                  color: "rgba(0,0,0,0.6)",
+                }}
+              >
+                Loading...
+              </div>
+            )}
+
+            {/* reached end */}
+            {!hasMore && !loadingInitial && (
+              <div
+                style={{
+                  padding: 12,
+                  textAlign: "center",
+                  color: "rgba(0,0,0,0.6)",
+                }}
+              >
+                You've reached the end.
+              </div>
+            )}
           </div>
         </section>
 

@@ -51,9 +51,9 @@ export default function RootLayout({
           <footer className="site-footer">
             © {new Date().getFullYear()} · User Management
           </footer>
-          {process.env.NODE_ENV !== "production" && (
+          {/* {process.env.NODE_ENV !== "production" && (
             <ReactQueryDevtools initialIsOpen={false} />
-          )}
+          )} */}
         </QueryClientProvider>
       </body>
     </html>
