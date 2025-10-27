@@ -1,6 +1,14 @@
+// src/components/Dashboard/Sidebar/__test__/Sidebar.test.tsx
 /**
- * Sidebar.test.tsx — replace require() usePathname with jest.spyOn
+ * Sidebar.test.tsx
+ * Mock next/navigation at top so hooks are writable mocks.
  */
+jest.mock("next/navigation", () => ({
+  __esModule: true,
+  usePathname: jest.fn(),
+  useRouter: jest.fn(),
+}));
+
 import React from "react";
 import { render, screen } from "@testing-library/react";
 import * as nextNavigation from "next/navigation";
@@ -12,9 +20,9 @@ describe("Sidebar", () => {
   });
 
   test("renders nav items and highlights active item", () => {
-    jest
-      .spyOn(nextNavigation, "usePathname")
-      .mockReturnValue("/dashboard/users");
+    (nextNavigation.usePathname as jest.Mock).mockReturnValue(
+      "/dashboard/users"
+    );
     render(<Sidebar />);
 
     expect(screen.getByText(/Dashboard/i)).toBeInTheDocument();

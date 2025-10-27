@@ -1,7 +1,7 @@
 // app/dashboard/page.tsx
 "use client";
 
-import React, { useLayoutEffect, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import ThemePreview from "@/components/Dashboard/ThemePreview/ThemePreview";
 import styles from "./styles/dashboard.module.css";
 import TypewriterText from "@/components/UI/TypewriterText/TypewriterText";
@@ -118,35 +118,11 @@ function SpinnerOverlay({ visible }: { visible: boolean }) {
 export default function DashboardPage() {
   const router = useRouter();
 
+  /* We now treat the DB as the single source of truth for theme.
+     selectedThemeId starts null and is set by the server response. */
   const [selectedThemeId, setSelectedThemeId] = useState<string | null>(null);
   const [totalUsers, setTotalUsers] = useState<number | null>(null);
-
-  /* spinnerVisible: starts true (to prevent snap), hides after all queries settled */
   const [spinnerVisible, setSpinnerVisible] = useState<boolean>(true);
-
-  /* Apply theme BEFORE paint using useLayoutEffect */
-  useLayoutEffect(() => {
-    let storedId: string | null = null;
-    try {
-      storedId = localStorage.getItem(STORAGE_KEY);
-    } catch {}
-    if (!storedId) {
-      storedId = "light";
-      try {
-        localStorage.setItem(STORAGE_KEY, storedId);
-      } catch {}
-    }
-    const theme = THEMES.find((t) => t.id === storedId) ?? THEMES[1];
-    applyThemeVars(theme.color);
-    setSelectedThemeId(theme.id);
-  }, []);
-
-  useEffect(() => {
-    if (!selectedThemeId) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, selectedThemeId);
-    } catch {}
-  }, [selectedThemeId]);
 
   useEffect(() => {
     const interceptor = api.interceptors.request.use((config) => {
@@ -164,7 +140,8 @@ export default function DashboardPage() {
     return () => api.interceptors.request.eject(interceptor);
   }, []);
 
-  /* Use react-query to fetch me, count and theme in parallel */
+  /* fetch me, count and theme in parallel
+     THEME QUERY: no cache, always refetch on mount so DB is authoritative */
   const results = useQueries({
     queries: [
       {
@@ -177,7 +154,7 @@ export default function DashboardPage() {
           });
           return res.data?.data ?? res.data;
         },
-        staleTime: 1000 * 30, // 30s
+        staleTime: 1000 * 30,
       },
       {
         queryKey: ["users", "count"],
@@ -200,6 +177,12 @@ export default function DashboardPage() {
           });
           return res.data ?? res.data?.data;
         },
+        // FORCE fresh fetch on every mount/return. No caching.
+        staleTime: 0,
+
+        refetchOnMount: "always",
+        // optionally set to true if you want refetch on window focus as well
+        refetchOnWindowFocus: false,
       },
     ],
   });
@@ -208,7 +191,7 @@ export default function DashboardPage() {
   const countQuery = results[1];
   const themeQuery = results[2];
 
-  // If no token, immediately clear and redirect
+  // If no token, clear and redirect
   useEffect(() => {
     const token = getToken();
     if (!token) {
@@ -224,7 +207,7 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // handle auth failure from meQuery (redirect on 401)
+  // redirect on 401 from meQuery
   const meIsError = meQuery.isError;
   const meError = meQuery.error;
   useEffect(() => {
@@ -259,19 +242,25 @@ export default function DashboardPage() {
     }
   }, [countQuery.isSuccess, countQuery.data]);
 
-  // apply theme from server when available
+  // apply theme from server when available — DB is the source of truth
   useEffect(() => {
     if (themeQuery.isSuccess && themeQuery.data) {
       const serverColor =
         themeQuery.data?.colorHex ?? themeQuery.data?.color ?? null;
       const serverThemeId =
         themeQuery.data?.themeId ?? themeQuery.data?.id ?? null;
+
       if (serverColor) applyThemeVars(serverColor);
+
+      // set local selected state from server and persist (for refresh)
       if (serverThemeId) {
         setSelectedThemeId(serverThemeId);
         try {
           localStorage.setItem(STORAGE_KEY, serverThemeId);
         } catch {}
+      } else {
+        // If server didn't send an id but did send a color, clear selection id
+        setSelectedThemeId(null);
       }
     }
   }, [themeQuery.isSuccess, themeQuery.data]);
@@ -288,7 +277,6 @@ export default function DashboardPage() {
   useEffect(() => {
     let tid: number | undefined;
     if (allSettled) {
-      // delay a tiny bit so UX doesn't flicker
       tid = window.setTimeout(() => setSpinnerVisible(false), 120);
     } else {
       setSpinnerVisible(true);
@@ -313,7 +301,7 @@ export default function DashboardPage() {
       }
     })();
 
-    // optimistic
+    // optimistic - apply immediately for snappy UX
     applyThemeVars(theme.color);
     setSelectedThemeId(theme.id);
     try {
@@ -333,6 +321,7 @@ export default function DashboardPage() {
           localStorage.setItem(STORAGE_KEY, serverThemeId);
         } catch {}
       } else {
+        // revert to previous if server responded non-2xx
         if (prevColor) applyThemeVars(prevColor);
         setSelectedThemeId(prevThemeId);
         try {
@@ -340,11 +329,15 @@ export default function DashboardPage() {
         } catch {}
       }
     } catch {
+      // revert on network/error
       if (prevColor) applyThemeVars(prevColor);
       setSelectedThemeId(prevThemeId);
       try {
         if (prevThemeId) localStorage.setItem(STORAGE_KEY, prevThemeId);
       } catch {}
+    } finally {
+      // After changing theme we want the next mount to re-read from DB (DB is source of truth).
+      // We set no-query-cache for theme above (cacheTime:0), so re-mount/refetch will hit DB.
     }
   }
 

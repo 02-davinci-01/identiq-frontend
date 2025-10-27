@@ -279,11 +279,11 @@ export default function ProfileDropdown(): JSX.Element {
       }
 
       if (nameUpdated && emailRequested) {
-        showSuccess("Name updated. Verification sent to new email.");
+        // showSuccess("Name updated. Verification sent to new email.");
       } else if (nameUpdated) {
         showSuccess("Name updated");
       } else if (emailRequested) {
-        showSuccess("Verification sent to new email.");
+        // showSuccess("Verification sent to new email.");
       } else {
         showSuccess("No changes were necessary.");
       }
