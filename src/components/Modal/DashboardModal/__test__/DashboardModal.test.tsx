@@ -1,12 +1,6 @@
 // src/components/Modal/DashboardModal/__test__/DashboardModal.test.tsx
 import React from "react";
-import {
-  render,
-  screen,
-  fireEvent,
-  act,
-  waitFor,
-} from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axios from "axios";
 
@@ -31,8 +25,8 @@ import {
 describe("DashboardModal components (tsx tests)", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // Reset DOM location href to empty for tests (JSDOM supports assignment)
-    (window.location as any).href = "";
+    // Reset DOM location to root for tests in a type-safe way
+    window.history.pushState({}, "", "/");
   });
 
   describe("GenericModal", () => {
@@ -227,8 +221,8 @@ describe("DashboardModal components (tsx tests)", () => {
       // after successful delete the component does: window.location.href = "/";
       await waitFor(
         () => {
-          // use URL parsing to check the pathname (works whether JSDOM sets "http://localhost/" or a bare "/")
-          expect(new URL((window.location as any).href).pathname).toBe("/");
+          // check pathname directly (type-safe)
+          expect(window.location.pathname).toBe("/");
         },
         { timeout: 1000 }
       );

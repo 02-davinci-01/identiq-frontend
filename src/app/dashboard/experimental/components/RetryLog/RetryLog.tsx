@@ -1,6 +1,6 @@
 // RetryLog.tsx
 import React from "react";
-import type { AttemptLogEntry } from "../hooks/useInfiniteExperimentalUsers";
+import type { AttemptLogEntry } from "../../hooks/useInfiniteExperimentalUsers";
 
 type Props = {
   attemptLog: AttemptLogEntry[];

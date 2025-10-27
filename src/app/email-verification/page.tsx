@@ -1,6 +1,6 @@
 // src/app/email-verification/page.tsx
 import React, { Suspense } from "react";
-import styles from "./email-verification.module.css";
+import styles from "./EmailVerificationClient/email-verification.module.css";
 
 /**
  * Server page — renders the client verification component inside Suspense.
@@ -9,7 +9,10 @@ import styles from "./email-verification.module.css";
  */
 
 const ClientEmailVerification = React.lazy(
-  () => import("@/app/email-verification/EmailVerificationClient")
+  () =>
+    import(
+      "@/app/email-verification/EmailVerificationClient/EmailVerificationClient"
+    )
 );
 
 export default function EmailVerificationPage() {

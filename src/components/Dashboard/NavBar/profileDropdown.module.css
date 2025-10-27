@@ -214,3 +214,52 @@
     font-size: 13px;
   }
 }
+
+/* crumbs */
+.crumbsContainer {
+  position: fixed;
+  top: 72px;
+  right: 24px;
+  z-index: 3000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.crumb {
+  padding: 10px 12px;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+  font-size: 0.95rem;
+  min-width: 160px;
+  max-width: 320px;
+}
+
+/* loading - yellow */
+.crumbLoading {
+  background: #fff7cc;
+  color: #5a4a00;
+  border: 1px solid rgba(90, 74, 0, 0.08);
+}
+
+/* info (blue-ish) */
+.crumbInfo {
+  background: #eef2ff;
+  color: #1e3a8a;
+}
+
+/* success - green */
+.crumbSuccess {
+  background: #e6ffed;
+  color: #045a22;
+}
+
+/* error - red */
+.crumbError {
+  background: #ffeaea;
+  color: #7a1f1f;
+}
+
+.crumbText {
+  display: block;
+}

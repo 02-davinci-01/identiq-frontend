@@ -1,7 +1,7 @@
 // ThemeChart.tsx
 import React, { useMemo } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
-import type { UserView } from "../hooks/useInfiniteExperimentalUsers";
+import type { UserView } from "../../hooks/useInfiniteExperimentalUsers";
 
 type Props = {
   users: UserView[];

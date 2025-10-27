@@ -3,7 +3,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import styles from "./email-verification.module.css";
+import styles from "@/app/email-verification/EmailVerificationClient/email-verification.module.css";
 
 type Status = "pending" | "success" | "failure";
 

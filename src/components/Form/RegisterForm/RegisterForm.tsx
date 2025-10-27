@@ -122,7 +122,6 @@ export default function RegisterForm() {
       dispatch({ type: "SET_ERROR", payload: msg });
       showBreadcrumb(msg, "error");
       // keep the original object for console debugging
-      // eslint-disable-next-line no-console
       console.error("Register error:", err);
     } finally {
       dispatch({ type: "SET_LOADING", payload: false });

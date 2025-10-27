@@ -12,8 +12,17 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 type ServerResp = { status: number; data: unknown };
 
+type Breadcrumb = {
+  id: string;
+  type: "success" | "error" | "info" | "loading";
+  text: string;
+};
+
 /**
- * ProfileDropdown - fully typed
+ * ProfileDropdown with informative breadcrumbs:
+ * - "name updating" (yellow) → replaced by success/error
+ * - success/failure/info appear as top-right floating breadcrumbs
+ * - inline bottom feedback removed for cleaner UX
  */
 export default function ProfileDropdown(): JSX.Element {
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -25,13 +34,15 @@ export default function ProfileDropdown(): JSX.Element {
   const [origName, setOrigName] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
-
+  const [, setError] = useState<string | null>(null);
+  const [, setSuccessMsg] = useState<string | null>(null);
   const [openChangePassword, setOpenChangePassword] = useState(false);
   const [openDeleteModal, setOpenDeleteModal] = useState(false);
 
   const queryClient = useQueryClient();
+
+  // breadcrumb / toast state
+  const [crumbs, setCrumbs] = useState<Breadcrumb[]>([]);
 
   const isValidEmail = (e: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
@@ -75,7 +86,6 @@ export default function ProfileDropdown(): JSX.Element {
         > | null;
         setOrigEmail((payload?.email as string) ?? "");
         setOrigName((payload?.name as string) ?? "");
-        // keep inputs empty per previous behavior (user types to change)
         setName("");
         setEmail("");
       } catch {
@@ -87,12 +97,47 @@ export default function ProfileDropdown(): JSX.Element {
     fetchUser();
   }, []);
 
-  // useMutation: pass an options object with mutationFn to avoid TS overload ambiguity
+  // ----------------------------
+  // Breadcrumb helpers
+  // ----------------------------
+  function pushBreadcrumb(type: Breadcrumb["type"], text: string): string {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const crumb: Breadcrumb = { id, type, text };
+    setCrumbs((c) => [crumb, ...c]);
+
+    // auto-dismiss after 3s
+    window.setTimeout(() => {
+      setCrumbs((c) => c.filter((x) => x.id !== id));
+    }, 3000);
+
+    return id;
+  }
+
+  function removeBreadcrumb(id?: string) {
+    if (!id) return;
+    setCrumbs((c) => c.filter((x) => x.id !== id));
+  }
+
+  function showError(msg: string) {
+    setError(msg);
+    pushBreadcrumb("error", msg);
+  }
+  function showSuccess(msg: string) {
+    setSuccessMsg(msg);
+    pushBreadcrumb("success", msg);
+    window.setTimeout(() => setSuccessMsg(null), 2500);
+  }
+
+  // ----------------------------
+  // Mutation (name)
+  // ----------------------------
+  type NameMutationContext = { previous?: unknown; loadingCrumbId?: string };
+
   const nameMutation = useMutation<
     ServerResp,
     unknown,
     string,
-    { previous?: unknown }
+    NameMutationContext
   >({
     mutationFn: async (newName: string) => {
       const token = getToken();
@@ -108,32 +153,26 @@ export default function ProfileDropdown(): JSX.Element {
       const previous = queryClient.getQueryData<unknown>(["me"]);
       queryClient.setQueryData(["me"], (old: unknown) => {
         const o = (old as Record<string, unknown> | null) ?? {};
-        return {
-          ...o,
-          name: newName,
-        };
+        return { ...o, name: newName };
       });
-      return { previous };
+      const loadingCrumbId = pushBreadcrumb("loading", "name updating");
+      return { previous, loadingCrumbId };
     },
-    onError: (
-      _err: unknown,
-      _newName: string,
-      context?: { previous?: unknown }
-    ) => {
+    onError: (_err, _newName, context) => {
       if (context?.previous) {
         queryClient.setQueryData(["me"], context.previous);
       }
+      removeBreadcrumb(context?.loadingCrumbId);
+      pushBreadcrumb("error", "Failed to update name.");
     },
-    onSuccess: (res: ServerResp, newName: string) => {
+    onSuccess: (res, newName, context) => {
+      removeBreadcrumb(context?.loadingCrumbId);
       if (res?.status >= 200 && res?.status < 300) {
         const returned = res?.data as Record<string, unknown> | null;
-
         let serverName = newName;
-
-        // returned.name as string?
-        if (returned && typeof returned.name === "string") {
+        if (returned && typeof returned.name === "string")
           serverName = returned.name;
-        } else if (
+        else if (
           returned &&
           typeof returned.data === "object" &&
           returned.data !== null
@@ -141,14 +180,13 @@ export default function ProfileDropdown(): JSX.Element {
           const nested = returned.data as Record<string, unknown>;
           if (typeof nested.name === "string") serverName = nested.name;
         }
-
-        queryClient.setQueryData(["me"], (old: unknown) => {
-          const o = (old as Record<string, unknown> | null) ?? {};
-          return {
-            ...o,
-            name: serverName,
-          };
-        });
+        queryClient.setQueryData(["me"], (old: unknown) => ({
+          ...(old as Record<string, unknown> | null),
+          name: serverName,
+        }));
+        pushBreadcrumb("success", "updated successfully");
+      } else {
+        pushBreadcrumb("error", "Failed to update name (server).");
       }
     },
     onSettled: () => {
@@ -156,23 +194,24 @@ export default function ProfileDropdown(): JSX.Element {
     },
   });
 
+  // ----------------------------
+  // Save handler (name + email)
+  // ----------------------------
   async function handleSave(e?: React.FormEvent) {
-    if (e) e.preventDefault();
+    e?.preventDefault();
     setError(null);
     setSuccessMsg(null);
 
     const nameProvided = name.trim().length > 0;
     const emailProvided = email.trim().length > 0;
 
-    // if nothing provided -> nothing to do
     if (!nameProvided && !emailProvided) {
-      setError("No changes to save");
+      showError("No changes to save");
       return;
     }
 
-    // validate email only when provided
     if (emailProvided && !isValidEmail(email)) {
-      setError("Please enter a valid email");
+      showError("Please enter a valid email");
       return;
     }
 
@@ -181,7 +220,6 @@ export default function ProfileDropdown(): JSX.Element {
       let nameUpdated = false;
       let emailRequested = false;
 
-      // 1) Update name only if user typed a name and it's different from origName
       if (nameProvided && name.trim() !== origName.trim()) {
         const mutateResult = await nameMutation.mutateAsync(name.trim());
         const mutateData =
@@ -193,11 +231,11 @@ export default function ProfileDropdown(): JSX.Element {
           (mutateData && mutateData["ok"] === false)
         ) {
           const data = mutateResult?.data as Record<string, unknown> | null;
-          setError(
+          const msg =
             (data?.error as string) ||
-              (data?.message as string) ||
-              "Failed to update name"
-          );
+            (data?.message as string) ||
+            "Failed to update name";
+          showError(msg);
           setSaving(false);
           return;
         } else {
@@ -205,7 +243,6 @@ export default function ProfileDropdown(): JSX.Element {
         }
       }
 
-      // 2) Only attempt email-change if the user provided a new email and it differs from original
       if (emailProvided && email.trim() !== origEmail.trim()) {
         const token = getToken();
         const headers: Record<string, string> = {
@@ -227,52 +264,45 @@ export default function ProfileDropdown(): JSX.Element {
           (emailData && emailData["ok"] === false)
         ) {
           const d = emailData;
-          setError(
+          const msg =
             (d?.error as string) ||
-              (d?.message as string) ||
-              "Failed to initiate email change"
-          );
+            (d?.message as string) ||
+            "Failed to initiate email change";
+          showError(msg);
           setSaving(false);
           return;
         } else {
           emailRequested = true;
-          setOrigEmail(email.trim()); // update baseline so subsequent changes compare correctly
+          setOrigEmail(email.trim());
+          pushBreadcrumb("info", "Verification email sent to new address.");
         }
       }
 
-      // Build succinct success message
       if (nameUpdated && emailRequested) {
-        setSuccessMsg("Name updated. Verification sent to new email.");
+        showSuccess("Name updated. Verification sent to new email.");
       } else if (nameUpdated) {
-        setSuccessMsg("Name updated");
+        showSuccess("Name updated");
       } else if (emailRequested) {
-        setSuccessMsg("Verification sent to new email.");
+        showSuccess("Verification sent to new email.");
       } else {
-        // If user provided inputs but neither resulted in an action (e.g., provided same name/email),
-        // give a gentle message.
-        setSuccessMsg("No changes were necessary.");
+        showSuccess("No changes were necessary.");
       }
 
-      setTimeout(() => setSuccessMsg(null), 2500);
-      // clear inputs but keep origName/origEmail (origName updated by query invalidation after mutation)
       setName("");
       setEmail("");
       setOpen(false);
-    } catch (err: unknown) {
+    } catch (err) {
       let msg = "Network error while saving changes";
       if (err instanceof Error) msg = err.message;
       else if (typeof err === "object" && err !== null) {
         try {
           const maybe = err as Record<string, unknown>;
           if (typeof maybe.message === "string") msg = maybe.message;
-        } catch {
-          /* ignore */
-        }
+        } catch {}
       }
-      setError(msg);
+      showError(msg);
     } finally {
       setSaving(false);
-      // refresh server state
       queryClient.invalidateQueries({ queryKey: ["me"] });
     }
   }
@@ -287,15 +317,17 @@ export default function ProfileDropdown(): JSX.Element {
     setOpenDeleteModal(true);
   }
 
+  // ----------------------------
+  // Render
+  // ----------------------------
   return (
     <>
       <div className={styles.wrapper} ref={rootRef}>
         <button
           className={styles.trigger}
           onClick={() => {
-            if (open) {
-              closeDropdown();
-            } else {
+            if (open) closeDropdown();
+            else {
               setName("");
               setEmail("");
               setError(null);
@@ -382,20 +414,35 @@ export default function ProfileDropdown(): JSX.Element {
                   Delete account
                 </button>
               </div>
-
-              {(error || successMsg) && (
-                <div
-                  className={`${styles.feedback} ${
-                    error ? styles.error : styles.success
-                  }`}
-                  role="status"
-                >
-                  {error || successMsg}
-                </div>
-              )}
+              {/* ✅ Removed inline bottom feedback */}
             </form>
           </div>
         )}
+      </div>
+
+      {/* Floating breadcrumbs */}
+      <div
+        className={styles.crumbsContainer}
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {crumbs.map((c) => (
+          <div
+            key={c.id}
+            className={`${styles.crumb} ${
+              c.type === "success"
+                ? styles.crumbSuccess
+                : c.type === "error"
+                ? styles.crumbError
+                : c.type === "info"
+                ? styles.crumbInfo
+                : styles.crumbLoading
+            }`}
+            role="status"
+          >
+            <span className={styles.crumbText}>{c.text}</span>
+          </div>
+        ))}
       </div>
 
       <ChangePasswordModal

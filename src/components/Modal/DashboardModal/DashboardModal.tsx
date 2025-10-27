@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, ReactNode } from "react";
+import React, { useCallback, useEffect, useRef, ReactNode } from "react";
 import ReactDOM from "react-dom";
 import styles from "./dashboardModal.module.css";
 import axios, { AxiosInstance } from "axios";
@@ -77,14 +77,16 @@ export function GenericModal({
 }: GenericModalProps) {
   const modalRef = useRef<HTMLDivElement | null>(null);
 
-  function handleClose() {
+  // wrap handleClose in useCallback so its identity is stable and effects depending on it
+  // don't re-run unnecessarily. onClose is included in deps because it's an external prop.
+  const handleClose = useCallback(() => {
     try {
       clearInputsIn(modalRef.current);
     } catch {
       // ignore
     }
     onClose();
-  }
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -118,7 +120,7 @@ export function GenericModal({
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [open, handleClose]); // ✅ Added handleClose dependency
+  }, [open, handleClose]); // handleClose is stable thanks to useCallback
 
   if (!open) return null;
 
@@ -244,7 +246,7 @@ export function ChangePasswordModal({ open, onClose }: ChangePasswordProps) {
 
       setError(json?.error || json?.message || "Failed to change password.");
     } catch {
-      setError("Network error changing password."); // ✅ removed unused `err`
+      setError("Network error changing password.");
     } finally {
       setLoading(false);
     }
@@ -395,7 +397,7 @@ export function DeleteAccountModal({ open, onClose }: DeleteAccountProps) {
       }
       setError(json?.error || json?.message || "Failed to delete account.");
     } catch {
-      setError("Network error during deletion."); // ✅ removed unused `err`
+      setError("Network error during deletion.");
     } finally {
       setLoading(false);
     }

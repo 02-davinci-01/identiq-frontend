@@ -1,22 +1,31 @@
-// UsersTable.tsx
-// Pure presentation of users list and "Delete" action.
-// No inline functions in props — handlers passed by parent.
+// src/app/dashboard/users/components/UsersTable.tsx
+// Pure presentation for the users list.
 
 import React from "react";
+import type { UserView } from "../../hooks/useInfiniteUsers";
 import styles from "@/app/dashboard/styles/dashboard.module.css";
-import type { UserView } from "../hooks/useInfiniteExperimentalUsers";
 
 type Props = {
   users: UserView[];
-  onStartDelete: (id: string) => void;
-  fetching: boolean;
-  limit: number;
+  onOpenDelete: (id: string) => void;
+  loadingInitial: boolean;
+  loadingMore: boolean;
+  pageLimit: number;
+  isCurrentUser?: (u: UserView) => boolean;
 };
 
-export function UsersTable({ users, onStartDelete, fetching, limit }: Props) {
+export function UsersTable({
+  users,
+  onOpenDelete,
+  loadingInitial,
+  loadingMore,
+  pageLimit,
+  isCurrentUser,
+}: Props) {
   return (
     <div className={styles.themesCard}>
       <h3 className={styles.themesCard_h3}>Users</h3>
+
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr
@@ -53,41 +62,56 @@ export function UsersTable({ users, onStartDelete, fetching, limit }: Props) {
                 </div>
               </td>
               <td style={{ padding: "12px 8px" }}>
-                <button
-                  onClick={() => onStartDelete(u.id)}
-                  className={styles.btnSmall}
-                  style={{
-                    background: "#ad2f2f",
-                    boxShadow: "none",
-                    color: "#fff",
-                  }}
-                >
-                  Delete
-                </button>
+                {!isCurrentUser?.(u) ? (
+                  <button
+                    onClick={() => onOpenDelete(u.id)}
+                    className={styles.btnSmall}
+                    style={{
+                      background: "#ad2f2f",
+                      boxShadow: "none",
+                      color: "#fff",
+                    }}
+                  >
+                    Delete
+                  </button>
+                ) : null}
               </td>
             </tr>
           ))}
 
-          {users.length === 0 && (
+          {loadingInitial && users.length === 0 && (
             <tr>
               <td colSpan={3} style={{ padding: 12 }}>
-                {fetching
-                  ? "Waiting for experimental data..."
-                  : `No users loaded yet. Scroll to trigger load.`}
+                Loading...
+              </td>
+            </tr>
+          )}
+
+          {!loadingInitial && users.length === 0 && (
+            <tr>
+              <td colSpan={3} style={{ padding: 12 }}>
+                No users found.
               </td>
             </tr>
           )}
         </tbody>
       </table>
 
-      {/* sentinel area is expected to be provided by parent (div ref) */}
-      <div style={{ padding: 12, fontSize: 13, color: "#666" }}>
-        {fetching ? (
-          <div>Loading more...</div>
-        ) : (
-          <div>Scroll to load more users.</div>
-        )}
-      </div>
+      {loadingMore && users.length >= pageLimit && (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            padding: 12,
+          }}
+        >
+          <div className={styles.spinner} />
+          <div style={{ marginTop: 8, color: "rgba(0,0,0,0.6)" }}>
+            Loading more...
+          </div>
+        </div>
+      )}
     </div>
   );
 }

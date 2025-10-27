@@ -2,14 +2,14 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import styles from "@/app/dashboard/styles/dashboard.module.css";
-import { UsersTable } from "@/app/dashboard/users/components/UsersTable";
-import { ThemePanel } from "@/app/dashboard/users/components/ThemePanel";
-import { RefreshTimer } from "./components/RefreshTimer";
-import { DeleteModal } from "./components/DeleteModal";
-import { useInfiniteUsers } from "./hooks/useInfiniteUsers";
+import { UsersTable } from "@/app/dashboard/users/components/UsersTable/UsersTable";
+import { ThemePanel } from "@/app/dashboard/users/components/ThemePanel/ThemePanel";
+import { RefreshTimer } from "./components/RefreshTimer/RefreshTimer";
+import { DeleteModal } from "./components/DeleteModal/DeleteModal";
+import { useInfiniteUsers, UserView } from "./hooks/useInfiniteUsers";
 import { applyThemeVars } from "./utils/themeUtils";
 import axios from "axios";
-import { getCurrentUserIdentifiers } from "./helpers/getCurrentUserIdentifier"; // optional helper - see note
+// removed unused import: getCurrentUserIdentifiers
 
 const STORAGE_KEY = "dashboardTheme";
 
@@ -34,7 +34,7 @@ export default function UsersPageContainer() {
   }>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // 👇 added userCount state and fetch logic
+  // added userCount state and fetch logic
   const [userCount, setUserCount] = useState<number | null>(null);
 
   const BACKEND_BASE =
@@ -158,14 +158,23 @@ export default function UsersPageContainer() {
   async function confirmDelete() {
     if (!pendingUser) return;
     setDeleting(true);
-    const res = await deleteUser({
-      id: pendingUser.id,
-      name: pendingUser.name,
-      email: pendingUser.email,
-    } as any);
+
+    // Prefer to pass a real UserView to deleteUser. If we can find the user in the loaded list,
+    // pass that object. Otherwise construct a minimal UserView fallback.
+    const targetUser: UserView =
+      users.find((u) => u.id === pendingUser.id) ??
+      ({
+        id: pendingUser.id,
+        name: pendingUser.name,
+        email: pendingUser.email,
+        theme: { name: "Custom", color: "#c96a2b" },
+      } as UserView);
+
+    const res = await deleteUser(targetUser);
     setDeleting(false);
     setModalOpen(false);
     setPendingUser(null);
+
     if (!res.ok) alert(res.message ?? "Failed to delete user");
 
     // refresh count after deletion
@@ -186,6 +195,8 @@ export default function UsersPageContainer() {
         <div className={styles.welcome}>User Data</div>
         <div className={styles.count}>
           {userCount !== null ? userCount : "—"}
+
+          <p>&nbsp;{(userCount ?? 0) > 1 ? "users" : "user"}</p>
         </div>
         <div className={styles.date}>{new Date().toLocaleDateString()}</div>
 
@@ -217,7 +228,7 @@ export default function UsersPageContainer() {
                 color: "rgba(0,0,0,0.6)",
               }}
             >
-              You've reached the end.
+              You have reached the end.
             </div>
           )}
         </section>

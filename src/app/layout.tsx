@@ -2,7 +2,7 @@
 "use client";
 
 import "@/app/globals.css";
-import Header from "@/components/Header/header";
+import Header from "@/components//Header/header";
 import { IBM_Plex_Mono, Josefin_Sans } from "next/font/google";
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";

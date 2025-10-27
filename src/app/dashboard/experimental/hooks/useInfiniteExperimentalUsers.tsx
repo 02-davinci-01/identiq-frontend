@@ -1,5 +1,5 @@
-// useInfiniteExperimentalUsers.tsx
-// Encapsulates pagination, retries, intersection observer sentinel, and deletion logic.
+// src/app/dashboard/experimental/hooks/useInfiniteExperimentalUsers.tsx
+// Updated: accepts optional totalCount and will stop fetching when loaded users >= totalCount
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { THEMES } from "../utils/themeUtils";
@@ -60,6 +60,7 @@ async function fetchWithRetries<T>(
       };
       options?.onAttempt?.(entry);
       if (ok) return { data: result, attempts };
+
       const extra = Math.floor(Math.random() * jitterMs);
       await delay(waitMs + extra);
     } catch (err: unknown) {
@@ -80,7 +81,15 @@ async function fetchWithRetries<T>(
   return { data: null, attempts: maxAttempts };
 }
 
-export function useInfiniteExperimentalUsers(initialLimit = 4) {
+/**
+ * Hook: infinite fetcher with retries, sentinel observer and deletion helpers.
+ * Now accepts optional `totalCount` — when provided, hook will stop fetching once
+ * loaded users.length >= totalCount.
+ */
+export function useInfiniteExperimentalUsers(
+  initialLimit = 4,
+  totalCount?: number | null
+) {
   const [users, setUsers] = useState<UserView[]>([]);
   const [offset, setOffset] = useState(0);
   const [limit] = useState(initialLimit);
@@ -94,7 +103,17 @@ export function useInfiniteExperimentalUsers(initialLimit = 4) {
   const observerRef = useRef<IntersectionObserver | null>(null);
 
   const loadNextPage = useCallback(async () => {
+    // defensive short-circuits
     if (fetching || exhausted) return;
+
+    // If we know totalCount from server, stop fetching once we've loaded that many users.
+    if (typeof totalCount === "number" && totalCount >= 0) {
+      if (users.length >= totalCount) {
+        setExhausted(true);
+        return;
+      }
+    }
+
     setFetching(true);
     setTriesCount(null);
 
@@ -110,7 +129,12 @@ export function useInfiniteExperimentalUsers(initialLimit = 4) {
         waitMs: 600,
         maxAttempts: 50,
         jitterMs: 400,
-        onAttempt: (entry) => setAttemptLog((p) => [...p, entry]),
+        onAttempt: (entry) =>
+          setAttemptLog((prev) => {
+            // keep most recent attempts at the front, limit log to 200 entries for memory
+            const next = [entry, ...prev];
+            return next.slice(0, 200);
+          }),
       }
     );
 
@@ -132,16 +156,33 @@ export function useInfiniteExperimentalUsers(initialLimit = 4) {
         } as UserView;
       });
 
-      setUsers((prev) => [...prev, ...mapped]);
+      setUsers((prev) => {
+        const merged = [...prev, ...mapped];
+        // if totalCount known, clamp to it (defensive)
+        if (typeof totalCount === "number" && totalCount >= 0) {
+          return merged.slice(0, totalCount);
+        }
+        return merged;
+      });
+
       setOffset((prev) => prev + mapped.length);
 
+      // if the page returned less than limit, we've reached the end
       if (mapped.length < pageLimit) setExhausted(true);
+
+      // additional check: if totalCount known and we've reached it, mark exhausted
+      if (typeof totalCount === "number" && totalCount >= 0) {
+        // users state update is async — compute based on previous + mapped
+        const estimatedCount = users.length + mapped.length;
+        if (estimatedCount >= totalCount) setExhausted(true);
+      }
     } else {
+      // no data: assume exhausted
       setExhausted(true);
     }
 
     setFetching(false);
-  }, [fetching, exhausted, offset, limit]);
+  }, [fetching, exhausted, offset, limit, totalCount, users]);
 
   // intersection observer set up (observes sentinelRef)
   useEffect(() => {

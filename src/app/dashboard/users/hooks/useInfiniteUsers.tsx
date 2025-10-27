@@ -92,6 +92,7 @@ export function useInfiniteUsers(initialLimit = 6) {
   }, [fetchPage]);
 
   // intersection observer (load more)
+  // intersection observer (load more)
   useEffect(() => {
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
@@ -138,7 +139,7 @@ export function useInfiniteUsers(initialLimit = 6) {
       observerRef.current = null;
     };
   }, [
-    sentinelRef.current,
+    sentinelRef, // ✅ depend on the ref object, not sentinelRef.current
     hasMore,
     loadingMore,
     loadingInitial,
