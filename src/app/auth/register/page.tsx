@@ -1,6 +1,6 @@
 // src/app/auth/register/page.tsx
 import React from "react";
-import RegisterForm from "@/components/RegisterForm/RegisterForm";
+import RegisterForm from "@/components/Form/RegisterForm/RegisterForm";
 
 export const dynamic = "force-static";
 

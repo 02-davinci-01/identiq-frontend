@@ -11,6 +11,14 @@
   --panel: #ffffff;
 }
 
+/* -----------------------
+   Global small helper: make browser account for fixed topbar during in-page scrolls
+   (helps anchor links / focus scrolls not land under the header)
+----------------------- */
+:global(html) {
+  scroll-padding-top: 72px;
+}
+
 /* Disable transitions during initial theme apply (prevents flash or weird animation) */
 :global(.disable-transitions) * {
   transition: none !important;
@@ -35,13 +43,36 @@
 /* -----------------------
    ROOT LAYOUT
 ----------------------- */
+/* dmRoot ensures space for the fixed topbar so content never sits under it */
 :local(.dmRoot) {
   min-height: 100vh;
   display: block;
   background: var(--bg-page);
   color: var(--fg);
-  padding-top: 72px;
+  padding-top: 72px; /* equal to topbar height */
   box-sizing: border-box;
+  position: relative;
+  z-index: 0;
+}
+
+/* wrapper that contains Sidebar + Main */
+:local(.dmBody) {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ensure main content cannot be painted behind topbar (stacking context) */
+:local(.dmMain) {
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 24px 20px;
+  box-sizing: border-box;
+  height: calc(100vh - 72px);
+  overflow-y: auto; /* Allow scrolling inside main */
+  position: relative;
+  z-index: 1;
 }
 
 /* -----------------------
@@ -59,8 +90,9 @@
   padding: 0 36px;
   background: var(--header-bg);
   color: var(--accent-foreground);
-  z-index: 140;
+  z-index: 1400; /* intentionally high to avoid accidental stacking issues */
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+  will-change: transform, background-color;
 }
 
 :local(.brand) {
@@ -78,20 +110,14 @@
   gap: 12px;
 }
 
-/* More prominent, theme-aware logout button:
-   - background uses --accent-foreground (computed in JS based on luminance)
-   - text uses --header-bg so it contrasts
-   - slight shadow for prominence
-*/
 /* -----------------------
-   LOGOUT BUTTON (updated hover)
+   LOGOUT BUTTON
 ----------------------- */
-
 :local(.logoutBtn) {
   border-radius: 10px;
   padding: 10px 14px;
   border: none;
-  background: var(--accent-foreground) !important; /* keep original color */
+  background: var(--accent-foreground) !important;
   color: var(--header-bg);
   cursor: pointer;
   font-weight: 800;
@@ -102,7 +128,7 @@
 :local(.logoutBtn):hover {
   transform: scale(1.06);
   box-shadow: 0 20px 45px rgba(0, 0, 0, 0.25);
-  background: var(--accent-foreground) !important; /* ensure no color flip */
+  background: var(--accent-foreground) !important;
 }
 
 /* -----------------------
@@ -110,14 +136,14 @@
 ----------------------- */
 :local(.sidebar) {
   position: fixed;
-  top: 72px;
+  top: 72px; /* sits immediately below topbar */
   left: 0;
   bottom: 0;
   width: 220px;
   padding: 18px;
   background: var(--panel);
   border-right: 1px solid rgba(0, 0, 0, 0.06);
-  z-index: 80;
+  z-index: 80; /* < topbar z-index */
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
 }
 
@@ -154,7 +180,7 @@
 }
 
 /* -----------------------
-   MAIN CONTENT
+   MAIN CONTENT WRAPPER (used by pages)
 ----------------------- */
 :local(.contentContainer) {
   width: min(1200px, calc(100% - 300px)); /* leaves space for sidebar */
@@ -162,7 +188,20 @@
   margin-right: auto;
   max-width: 1200px;
   box-sizing: border-box;
-  padding: 36px 20px;
+  padding: 24px 20px;
+  /* ensure the page-start is visible under the fixed topbar */
+  padding-top: 12px;
+}
+
+:local(.contentContainer2) {
+  width: min(1200px, calc(100% - 300px)); /* leaves space for sidebar */
+  margin-left: 260px; /* 220px sidebar + 40px breathing space */
+  margin-right: auto;
+  max-width: 1200px;
+  box-sizing: border-box;
+  padding: 24px 20px;
+  /* ensure the page-start is visible under the fixed topbar */
+  padding-top: 24px;
 }
 
 /* -----------------------
@@ -205,7 +244,7 @@
 }
 
 /* -----------------------
-   THEMES SECTION
+   THEMES SECTION & CARDS
 ----------------------- */
 :local(.themesCard) {
   padding: 18px;
@@ -214,7 +253,20 @@
   border: 1px solid rgba(0, 0, 0, 0.04);
   margin-bottom: 22px;
   box-shadow: 0 48px 120px rgba(0, 0, 0, 0.04), 0 12px 40px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
 }
+
+/* When a card must grow/shrink naturally (right column) */
+:local(.expandableCard) {
+  flex: 1 1 auto;
+  min-height: 220px;
+  max-height: none;
+  overflow: visible;
+}
+
+/* card header */
 :local(.themesCard_h3) {
   margin: 0 0 12px 0;
   color: rgba(0, 0, 0, 0.6);
@@ -309,7 +361,7 @@
 }
 
 /* -----------------------
-   RESPONSIVE
+   RESPONSIVE ADJUSTMENTS
 ----------------------- */
 @media (max-width: 1100px) {
   :local(.themePreview) {
@@ -352,4 +404,93 @@
     height: 56px;
     font-size: 14px;
   }
+}
+
+/* Prevent layout shifting on fetch */
+/* Maintain scroll stability during infinite loads */
+:local(.stableScroll) {
+  position: relative;
+  scroll-margin-top: 72px;
+  overflow-anchor: none;
+  min-height: calc(100vh - 72px);
+  padding-top: 72px; /* prevent topbar overlap where stableScroll is used */
+}
+
+/* spinner (used by experimental page and users page) */
+@keyframes dashboard-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 4px solid rgba(0, 0, 0, 0.08);
+  border-top-color: var(--accent);
+  animation: dashboard-spin 0.9s linear infinite;
+  margin: 10px auto;
+}
+
+/* cohesion containers used across pages */
+.contentContainer,
+.contentContainer2 {
+  padding: 20px;
+  background: var(--page-bg, #fff);
+  color: var(--fg, #111);
+  min-height: calc(100vh - 64px);
+  transition: background 140ms ease, color 140ms ease;
+}
+
+/* sidebar item + active state (keeps accent responsive to theme var) */
+.sbItem {
+  display: block;
+  padding: 10px 14px;
+  border-radius: 8px;
+  color: var(--fg);
+  text-decoration: none;
+  transition: background 120ms ease, color 120ms ease;
+}
+.sbItem:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+.active {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  color: var(--accent-foreground);
+  font-weight: 700;
+}
+
+/* small button used by pages — respects accent */
+.btnSmall {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  background: var(--accent);
+  color: var(--accent-foreground);
+  font-weight: 700;
+  box-shadow: none;
+}
+
+/* cards and UI small tweaks */
+.themesCard {
+  background: var(--card-bg, #fff);
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: var(--card-shadow, 0 6px 18px rgba(0, 0, 0, 0.04));
+}
+.themesCard_h3 {
+  margin: 0 0 12px 0;
+  font-size: 15px;
+}
+
+/* optional expandable card used in some pages */
+.expandableCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }

@@ -1,0 +1,213 @@
+/* src/components/LoginForm/loginForm.module.css */
+
+/* Card / container */
+.loginCard {
+  width: 100%;
+  max-width: 420px;
+  background: var(--bg-page);
+  border-radius: 12px;
+  padding: 22px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.loginCardInner {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Headings */
+.loginTitle {
+  font-family: var(--font-primary);
+  font-size: 28px;
+  margin: 0;
+  color: var(--fg);
+  font-weight: 700;
+}
+
+.loginSub {
+  font-family: var(--font-secondary);
+  font-size: 15px;
+  color: rgba(0, 0, 0, 0.65);
+  margin: 0 0 8px 0;
+}
+
+/* Form layout */
+.loginForm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.loginField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.loginLabel {
+  font-size: 14px;
+  color: var(--fg);
+  font-weight: 600;
+}
+
+/* Inputs */
+.loginInput {
+  height: 44px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #e6e6e6;
+  font-family: var(--font-primary);
+  font-size: 15px;
+  color: var(--fg);
+  background: #fff;
+}
+
+.loginInput:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(255, 122, 0, 0.12);
+  outline: none;
+}
+
+/* Row helpers */
+.loginRow {
+  display: flex;
+  align-items: center;
+}
+
+.loginBetween {
+  justify-content: space-between;
+}
+
+/* Remember checkbox */
+.loginCheckbox {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: rgba(0, 0, 0, 0.7);
+  font-size: 14px;
+}
+
+/* Forgot password link */
+.loginLinkBtn {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 4px;
+}
+
+/* Submit button */
+.loginSubmit {
+  width: 100%;
+  height: 44px;
+  font-size: 15px;
+  border-radius: 8px;
+}
+
+/* Error message */
+.loginError {
+  padding: 10px;
+  background: rgba(211, 47, 47, 0.08);
+  color: #d32f2f;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+/* Divider */
+.loginDivider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+  margin-bottom: 2px;
+}
+
+.loginDivider::before,
+.loginDivider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.loginDivider span {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+/* Social login buttons grid */
+.loginSocials {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* Signup text */
+.loginSignup {
+  text-align: center;
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.65);
+  margin-top: 6px;
+}
+
+.loginLink {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Responsiveness */
+@media (max-width: 480px) {
+  .loginCard {
+    padding: 16px;
+  }
+
+  .loginTitle {
+    font-size: 24px;
+  }
+}
+
+/* -------------------------------
+   PASSWORD FIELD FORMATTING
+   ------------------------------- */
+.passwordWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.passwordInput {
+  width: 100%;
+  padding-right: 42px;
+}
+
+.passwordToggle {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(0, 0, 0, 0.6);
+  transition: color 0.2s ease-in-out, transform 0.1s ease-in-out;
+}
+
+.passwordToggle:hover {
+  color: var(--accent);
+  transform: translateY(-50%) scale(1.05);
+}
+
+.passwordIcon {
+  pointer-events: none;
+  width: 20px;
+  height: 20px;
+  stroke-width: 2;
+  stroke: currentColor;
+}

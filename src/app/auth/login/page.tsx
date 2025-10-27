@@ -1,6 +1,6 @@
 // src/app/auth/login/page.tsx
 import React from "react";
-import LoginForm from "@/components/LoginForm/LoginForm";
+import LoginForm from "@/components/Form/LoginForm/LoginForm";
 
 export const dynamic = "force-static"; // enforce SSG
 

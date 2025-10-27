@@ -1,5 +1,5 @@
 // src/app/page.tsx
-import TypewriterText from "@/components/TypewriterText";
+import TypewriterText from "@/components/UI/TypewriterText/TypewriterText";
 export default function Home() {
   return (
     <section className="hero" aria-labelledby="home-title">
