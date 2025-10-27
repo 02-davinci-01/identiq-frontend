@@ -2,12 +2,28 @@
 import React from "react";
 import styles from "@/app/dashboard/styles/dashboard.module.css";
 
-type Theme = { id: string; label: string; img: string; color: string };
+type StaticTheme = { id: string; label: string; img: string; color: string };
+type SelectPayload = { themeId?: string; colorHex?: string };
 
-/**
- * Reference themes array (replaces previous color/data).
- */
-const THEMES: Theme[] = [
+type Props = {
+  id: string;
+  label: string;
+  selected?: boolean;
+  /**
+   * onSelect will be called with:
+   *  onSelect(id, payload)
+   * where payload is:
+   *   - for static themes: { themeId: id }
+   *   - for custom themes: { colorHex: hex }
+   */
+  onSelect?: (id?: string, payload?: SelectPayload) => void;
+  applyLabel?: string;
+  hex?: string; // if provided, use this hex (for custom themes)
+  isCustom?: boolean;
+  onDelete?: () => void;
+};
+
+const STATIC: StaticTheme[] = [
   { id: "teal", label: "Teal", img: "/themeChange.webp", color: "#2F6F66" },
   { id: "light", label: "Light", img: "/themeChange.webp", color: "#C96A2B" },
   { id: "dark", label: "Dark", img: "/themeChange.webp", color: "#000000" },
@@ -19,25 +35,25 @@ export default function ThemePreview({
   selected = false,
   onSelect,
   applyLabel = "Apply",
-}: {
-  id: string;
-  label: string;
-  selected?: boolean;
-  onSelect?: (id: string) => void;
-  applyLabel?: string;
-}) {
+  hex,
+  isCustom = false,
+  onDelete,
+}: Props) {
   const handleClick = () => {
-    if (typeof onSelect === "function") onSelect(id);
+    if (typeof onSelect === "function") {
+      const payload = isCustom ? { colorHex: hex } : { themeId: id };
+      onSelect(id, payload);
+    }
   };
 
-  // Find theme hex from reference array
-  const theme = THEMES.find((t) => t.id === id);
-  const primary = theme?.color ?? generateColorsFromId(id)[0];
+  // Determine primary color: prefer hex prop (custom), otherwise map static id
+  const primary =
+    (hex ?? STATIC.find((t) => t.id === id)?.color) ||
+    generateColorsFromId(id)[0];
 
-  // Special handling for dark theme: first swatch lighter grey, then darker, then darkest.
   const swatches =
     primary.toUpperCase() === "#000000"
-      ? ["#4D4D4D", "#333333", "#1A1A1A"] // light -> darker -> darkest
+      ? ["#4D4D4D", "#333333", "#1A1A1A"]
       : [shadeHex(primary, 12), shadeHex(primary, -6), shadeHex(primary, -18)];
 
   return (
@@ -126,13 +142,7 @@ export default function ThemePreview({
               >
                 <strong>HEX</strong>
               </div>
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "#666",
-                  marginTop: 4,
-                }}
-              >
+              <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
                 {primary.toUpperCase()}
               </div>
             </div>
@@ -142,18 +152,47 @@ export default function ThemePreview({
 
       <div className={styles.previewActions}>
         <div className={styles.labelStrong}>{label}</div>
-        <button
-          className={styles.btnSmall}
-          onClick={(e) => {
-            e.stopPropagation();
-            handleClick();
-          }}
-          disabled={selected}
-          aria-disabled={selected}
-          title={selected ? "Selected" : `Apply ${label}`}
-        >
-          {selected ? "Applied" : applyLabel}
-        </button>
+
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button
+            className={styles.btnSmall}
+            onClick={(e) => {
+              e.stopPropagation();
+              // call with same payload as outer click
+              if (typeof onSelect === "function") {
+                const payload = isCustom ? { colorHex: hex } : { themeId: id };
+                onSelect(id, payload);
+              }
+            }}
+            disabled={selected}
+            aria-disabled={selected}
+            title={selected ? "Selected" : `Apply ${label}`}
+          >
+            {selected ? "Applied" : applyLabel}
+          </button>
+
+          {/* For custom themes show a delete button */}
+          {isCustom && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (typeof onDelete === "function") onDelete();
+              }}
+              title="Delete custom theme"
+              style={{
+                padding: "6px 8px",
+                borderRadius: 8,
+                border: "1px solid rgba(0,0,0,0.06)",
+                background: "#fff",
+                color: "#e11d48",
+                cursor: "pointer",
+                fontWeight: 700,
+              }}
+            >
+              Delete
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
