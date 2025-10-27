@@ -1,6 +1,14 @@
+// src/components/Dashboard/Topbar/__test__/Topbar.test.tsx
 /**
- * Topbar.test.tsx — remove `any` casts, fully typed.
+ * Topbar.test.tsx
+ * Mock next/navigation early so useRouter is a jest.fn()
  */
+jest.mock("next/navigation", () => ({
+  __esModule: true,
+  usePathname: jest.fn(),
+  useRouter: jest.fn(),
+}));
+
 import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import Topbar from "../Topbar";
@@ -31,11 +39,9 @@ describe("Topbar", () => {
 
   test("renders brand and logout button", () => {
     const mockRouter: MockRouter = { push: jest.fn() };
-    jest
-      .spyOn(nextNavigation, "useRouter")
-      .mockReturnValue(
-        mockRouter as unknown as ReturnType<typeof nextNavigation.useRouter>
-      );
+    (nextNavigation.useRouter as jest.Mock).mockReturnValue(
+      mockRouter as unknown as ReturnType<typeof nextNavigation.useRouter>
+    );
 
     renderWithProviders(<Topbar />);
 
@@ -46,11 +52,10 @@ describe("Topbar", () => {
   test("handleLogout calls backend, clears storage and redirects", async () => {
     mockedAxios.post.mockResolvedValueOnce({ status: 200, data: { ok: true } });
     const mockRouter: MockRouter = { push: jest.fn() };
-    jest
-      .spyOn(nextNavigation, "useRouter")
-      .mockReturnValue(
-        mockRouter as unknown as ReturnType<typeof nextNavigation.useRouter>
-      );
+
+    (nextNavigation.useRouter as jest.Mock).mockReturnValue(
+      mockRouter as unknown as ReturnType<typeof nextNavigation.useRouter>
+    );
 
     renderWithProviders(<Topbar />);
 
