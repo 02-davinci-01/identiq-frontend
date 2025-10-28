@@ -3,15 +3,105 @@
 import React, { useEffect, useRef, useState } from "react";
 import styles from "@/app/dashboard/styles/dashboard.module.css";
 import { UsersTable } from "@/app/dashboard/users/components/UsersTable/UsersTable";
-import { ThemePanel } from "@/app/dashboard/users/components/ThemePanel/ThemePanel";
+import ThemePanel from "@/app/dashboard/users/components/ThemePanel/ThemePanel";
 import { RefreshTimer } from "./components/RefreshTimer/RefreshTimer";
 import { DeleteModal } from "./components/DeleteModal/DeleteModal";
 import { useInfiniteUsers, UserView } from "./hooks/useInfiniteUsers";
 import { applyThemeVars } from "./utils/themeUtils";
 import axios from "axios";
-// removed unused import: getCurrentUserIdentifiers
 
 const STORAGE_KEY = "dashboardTheme";
+
+/** Try to read JWT-like token from common localStorage keys for Authorization header */
+function getAuthTokenFromStorage(): string | null {
+  const keys = ["access_token", "accessToken", "token", "jwt", "authToken"];
+  for (const k of keys) {
+    const v = localStorage.getItem(k);
+    if (v) return v;
+  }
+  return null;
+}
+
+/**
+ * Attempt to apply theme from the server first (GET /themes/me).
+ * If server doesn't return a usable colorHex, then attempt to apply persisted object from localStorage.
+ */
+async function applyServerOrPersistedTheme() {
+  try {
+    // Try server first
+    const token = getAuthTokenFromStorage();
+    if (token) {
+      try {
+        const res = await axios.get("/themes/me", {
+          headers: {
+            Authorization: token.startsWith("Bearer")
+              ? token
+              : `Bearer ${token}`,
+          },
+          validateStatus: (s) => s >= 200 && s < 500,
+        });
+        if (res.status >= 200 && res.status < 300 && res.data) {
+          // Response shape may be { theme: {...} } or theme row object directly
+          const payload = res.data?.theme ?? res.data;
+          const color =
+            payload?.colorHex ??
+            payload?.color ??
+            payload?.color_hex ??
+            payload?.hex ??
+            null;
+          if (color && /^#?[0-9A-F]{6}$/i.test(color)) {
+            const normalized = color.startsWith("#")
+              ? color.toUpperCase()
+              : `#${color.toUpperCase()}`;
+            applyThemeVars(normalized);
+            return;
+          }
+        }
+      } catch (err) {
+        // server call failed — we'll fall back to local storage next
+      }
+    }
+  } catch (err) {
+    // ignore
+  }
+
+  // If we reach here, server didn't provide a usable color; apply persisted/local fallback
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+
+    // first try JSON persisted object (dashboard writes JSON)
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.colorHex) {
+        const hex = String(parsed.colorHex).trim().toUpperCase();
+        if (/^#([0-9A-F]{6})$/.test(hex)) {
+          applyThemeVars(hex);
+          return;
+        }
+      }
+    } catch {
+      // not JSON — continue to fallback
+    }
+
+    const mapping: Record<string, string> = {
+      teal: "#2f6f66",
+      light: "#c96a2b",
+      dark: "#000000",
+    };
+    const maybe = raw.trim();
+    // hex?
+    if (/^#([0-9A-F]{6})$/i.test(maybe)) {
+      applyThemeVars(maybe.toUpperCase());
+      return;
+    }
+    // treat as static id
+    const key = maybe.toLowerCase();
+    applyThemeVars(mapping[key] ?? mapping.light);
+  } catch {
+    // ignore
+  }
+}
 
 export default function UsersPageContainer() {
   const {
@@ -23,7 +113,7 @@ export default function UsersPageContainer() {
     secondsLeft,
     manualRefresh,
     deleteUser,
-    themeDistribution,
+    themeDistribution, // still available if you want to use it elsewhere
   } = useInfiniteUsers(6);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -34,13 +124,11 @@ export default function UsersPageContainer() {
   }>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // added userCount state and fetch logic
   const [userCount, setUserCount] = useState<number | null>(null);
 
   const BACKEND_BASE =
     process.env.NEXT_PUBLIC_API_URL || "https://localhost:3001";
 
-  // Fetch user count from /users/count
   useEffect(() => {
     async function fetchUserCount() {
       try {
@@ -66,23 +154,21 @@ export default function UsersPageContainer() {
     fetchUserCount();
   }, [BACKEND_BASE]);
 
-  // apply saved theme on mount
+  // On mount: attempt server -> fallback persisted theme. Listen for storage updates.
   useEffect(() => {
-    try {
-      const storedId = localStorage.getItem(STORAGE_KEY);
-      if (!storedId) return;
-      const mapping: Record<string, string> = {
-        teal: "#2f6f66",
-        light: "#c96a2b",
-        dark: "#000000",
-      };
-      applyThemeVars(mapping[storedId] ?? mapping.light);
-    } catch {
-      /* ignore */
+    applyServerOrPersistedTheme();
+
+    function onStorage(e: StorageEvent) {
+      if (e.key === STORAGE_KEY) {
+        applyServerOrPersistedTheme();
+      }
     }
+
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  // current user detection
+  // current user detection (unchanged)
   const currentUser = useRef<{
     id: string | null;
     email: string | null;
@@ -159,8 +245,6 @@ export default function UsersPageContainer() {
     if (!pendingUser) return;
     setDeleting(true);
 
-    // Prefer to pass a real UserView to deleteUser. If we can find the user in the loaded list,
-    // pass that object. Otherwise construct a minimal UserView fallback.
     const targetUser: UserView =
       users.find((u) => u.id === pendingUser.id) ??
       ({
@@ -177,7 +261,6 @@ export default function UsersPageContainer() {
 
     if (!res.ok) alert(res.message ?? "Failed to delete user");
 
-    // refresh count after deletion
     try {
       const resCount = await axios.get(`${BACKEND_BASE}/users/count`);
       if (resCount.data?.count !== undefined) setUserCount(resCount.data.count);
@@ -235,7 +318,8 @@ export default function UsersPageContainer() {
 
         <aside>
           <div className={styles.themesCard}>
-            <ThemePanel data={themeDistribution} />
+            {/* ThemePanel now self-fetches distribution counts from /themes/distribution-counts */}
+            <ThemePanel />
           </div>
         </aside>
       </div>
