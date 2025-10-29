@@ -24,6 +24,7 @@ const THEMES: ThemeStatic[] = [
 ];
 
 const STATIC_THEME_IDS = THEMES.map((t) => t.id);
+const CACHE_KEY = "dashboardTheme";
 
 function hexToRgb(hex: string) {
   const h = hex.replace("#", "");
@@ -56,11 +57,65 @@ function adjustLightness(hex: string, percent: number) {
   );
 }
 
+/* --- utility: normalize hex to "#RRGGBB" or null --- */
+function normalizeHex(raw?: string | null): string | null {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  const m = s.match(/^#?([0-9A-F]{6})$/i);
+  if (!m) return null;
+  return `#${m[1].toUpperCase()}`;
+}
+
+/* --- write canonical cache to localStorage (safe: only when `window` available) --- */
+function writeThemeCache(theme: {
+  themeId?: string | null;
+  colorHex: string;
+  label?: string | null;
+}) {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    const payload = {
+      themeId: theme.themeId ?? null,
+      colorHex: theme.colorHex,
+      label: theme.label ?? null,
+      updatedAt: Date.now(),
+    };
+    localStorage.setItem(CACHE_KEY, JSON.stringify(payload));
+  } catch {
+    // ignore localStorage failures
+  }
+}
+
+/* --- read canonical cache from localStorage --- */
+function readThemeCache(): {
+  themeId?: string | null;
+  colorHex: string;
+  label?: string | null;
+  updatedAt?: number;
+} | null {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return null;
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const hex = normalizeHex(parsed?.colorHex ?? parsed?.hex ?? null);
+    if (!hex) return null;
+    return {
+      themeId: parsed?.themeId ?? null,
+      colorHex: hex,
+      label: parsed?.label ?? null,
+      updatedAt: parsed?.updatedAt ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default function DashboardPage() {
   const router = useRouter();
 
   const [selectedThemeId, setSelectedThemeId] = useState<string | null>(null);
-  const [currentColor, setCurrentColor] = useState<string | null>(null);
+  const [currentColor, setCurrentColor] = useState<string | null>(null); // TRACK currently applied color
   const [totalUsers, setTotalUsers] = useState<number | null>(null);
   const [spinnerVisible, setSpinnerVisible] = useState<boolean>(true);
 
@@ -71,7 +126,7 @@ export default function DashboardPage() {
   // modal state for adding a theme (now only asks for name)
   const [hexModalOpen, setHexModalOpen] = useState(false);
   const [hexInput, setHexInput] = useState("#4287F5");
-  const [hexColorInput, setHexColorInput] = useState("#4287F5");
+  const [hexColorInput, setHexColorInput] = useState("#4287F5"); // for <input type="color">
   const [hexError, setHexError] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
   const [localMessage, setLocalMessage] = useState<string | null>(null);
@@ -116,12 +171,15 @@ export default function DashboardPage() {
         if (token) config.headers["Authorization"] = `Bearer ${token}`;
         else delete config.headers["Authorization"];
         config.params = { ...config.params, _t: Date.now() };
-      } catch {}
+      } catch {
+        // intentionally ignore errors reading token
+      }
       return config;
     });
     return () => api.interceptors.request.eject(interceptor);
   }, []);
 
+  /* fetch me, count, theme me, and theme custom in parallel */
   const results = useQueries({
     queries: [
       {
@@ -183,6 +241,7 @@ export default function DashboardPage() {
   const themeQuery = results[2];
   const customQuery = results[3];
 
+  // If no token, clear and redirect
   useEffect(() => {
     const token = getToken();
     if (!token) {
@@ -198,15 +257,20 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // apply theme from server when available — DB is the source of truth
   useEffect(() => {
     if (themeQuery.isSuccess && themeQuery.data) {
       const serverColor = (themeQuery.data?.theme?.colorHex ??
         themeQuery.data?.colorHex ??
         themeQuery.data?.color ??
+        themeQuery.data?.hex ??
         null) as string | null;
       const serverThemeId = (themeQuery.data?.theme?.themeId ??
         themeQuery.data?.themeId ??
         themeQuery.data?.id ??
+        null) as string | null;
+      const serverLabel = (themeQuery.data?.theme?.label ??
+        themeQuery.data?.label ??
         null) as string | null;
 
       if (serverColor) {
@@ -214,7 +278,13 @@ export default function DashboardPage() {
           ? serverColor.toUpperCase()
           : "#" + serverColor.toUpperCase();
         if (normalized !== currentColor) {
+          // apply and also WRITE the canonical cache so other pages can use it
           applyAndSetTheme(normalized, serverThemeId ?? null);
+          writeThemeCache({
+            themeId: serverThemeId ?? null,
+            colorHex: normalized,
+            label: serverLabel ?? null,
+          });
         }
       }
 
@@ -288,19 +358,11 @@ export default function DashboardPage() {
     if (payloadColor) applyAndSetTheme(payloadColor, selectedIdForUI);
     else if (selectedIdForUI) setSelectedThemeId(selectedIdForUI);
 
-    /* --- BUILD PATCH BODY ACCORDING TO UPDATED DTO --- */
-    // New payload will include:
-    // - themeId (when available)
-    // - label (when available for custom themes)
-    // - colorHex (the hex being applied)  <-- change to `hex` if backend expects `hex`
     const body: any = {};
 
-    // If this is a static theme selection, only send themeId (backend will apply canonical color)
     if (STATIC_THEME_IDS.includes(id ?? "")) {
       body.themeId = id;
     } else {
-      // For custom themes (or hex-based selections), include full info
-      // We try to find the matching customTheme (by hex or themeId) to include the label
       const colorToUse = payloadColor;
       const matchingCustom =
         customThemes.find(
@@ -311,22 +373,15 @@ export default function DashboardPage() {
             (payload?.themeId && c.themeId === payload.themeId)
         ) ?? null;
 
-      // themeId: prefer payload.themeId, otherwise if we have a matching custom theme use its themeId,
-      // otherwise derive from id (which in our UI is the hex for custom entries)
       body.themeId = payload?.themeId ?? matchingCustom?.themeId ?? id ?? null;
 
-      // label: prefer matching custom label (user-provided), otherwise fall back to themeId
       if (matchingCustom?.label) body.label = matchingCustom.label;
       else if (payload?.themeId) body.label = payload.themeId;
       else if (body.themeId) body.label = String(body.themeId);
 
-      // colorHex: include the hex being applied
       if (colorToUse) body.colorHex = colorToUse;
-      // If your backend expects `hex` instead of `colorHex`, replace the line above:
-      // if (colorToUse) body.hex = colorToUse;
     }
 
-    // If we still don't have anything to send, revert optimistic UI and abort
     if (!body.themeId && !body.colorHex) {
       if (prevColor) applyAndSetTheme(prevColor, prevThemeId);
       else setSelectedThemeId(prevThemeId);
@@ -347,7 +402,7 @@ export default function DashboardPage() {
 
     try {
       const res = await api.patch("/themes", body, { headers });
-      console.log;
+      console.log(res);
 
       if (res.status >= 200 && res.status < 300) {
         const returned = res.data ?? {};
@@ -355,6 +410,7 @@ export default function DashboardPage() {
         const serverThemeId = savedTheme?.themeId ?? selectedIdForUI;
         const serverColor =
           savedTheme?.colorHex ?? savedTheme?.color ?? savedTheme?.hex ?? null;
+        const serverLabel = savedTheme?.label ?? body.label ?? null;
 
         if (serverColor) {
           const normalized = serverColor.toUpperCase().startsWith("#")
@@ -365,8 +421,24 @@ export default function DashboardPage() {
           } else {
             setSelectedThemeId(serverThemeId ?? selectedIdForUI);
           }
+
+          // **WRITE canonical cache** after server confirmed result
+          writeThemeCache({
+            themeId: serverThemeId ?? selectedIdForUI,
+            colorHex: normalized,
+            label: serverLabel ?? null,
+          });
         } else if (serverThemeId) {
           setSelectedThemeId(serverThemeId);
+          // if server returned only themeId, find canonical color from static themes and cache that
+          const staticMatch = THEMES.find((t) => t.id === serverThemeId);
+          if (staticMatch) {
+            writeThemeCache({
+              themeId: serverThemeId,
+              colorHex: staticMatch.color,
+              label: staticMatch.label,
+            });
+          }
         }
 
         // refresh custom themes from server (new selection may have created/changed custom list)
@@ -374,7 +446,9 @@ export default function DashboardPage() {
           const customsRes = await api.get("/themes/custom", { headers });
           const items = customsRes?.data?.items ?? customsRes?.data ?? [];
           setCustomThemes(Array.isArray(items) ? items : []);
-        } catch {}
+        } catch (err) {
+          // ignore
+        }
       } else {
         if (prevColor) applyAndSetTheme(prevColor, prevThemeId);
         else setSelectedThemeId(prevThemeId);
@@ -411,7 +485,6 @@ export default function DashboardPage() {
     setHexError(null);
     setLocalMessage(null);
 
-    // name (label) is required
     if (!hexName || hexName.trim().length === 0) {
       setHexError("Name (label) is required for the theme.");
       return;
@@ -430,7 +503,6 @@ export default function DashboardPage() {
     try {
       setCustomLoading(true);
 
-      // themeId is derived from name on the frontend (you mentioned themeId === name)
       const derivedThemeId = hexName.trim();
 
       const payload: any = {
@@ -456,12 +528,11 @@ export default function DashboardPage() {
             }
           : { themeId: payload.themeId, label: payload.label, hex: normalized };
 
-      // optimistic update
       setCustomThemes((prev) => [newItem, ...prev]);
       setLocalMessage("Custom theme added.");
       setHexModalOpen(false);
 
-      // apply newly created theme (persist selection on server)
+      // apply newly created theme (persist selection on server which will cause cache write)
       await handleThemeSelect(newItem.hex, {
         colorHex: newItem.hex,
         themeId: newItem.themeId,
@@ -497,7 +568,7 @@ export default function DashboardPage() {
         }
       );
 
-      // if deleted hex was currently active, fall back to light
+      // if deleted hex was currently active, fall back to light (and update cache)
       const normalized = hex.startsWith("#")
         ? hex.toUpperCase()
         : "#" + hex.toUpperCase();
@@ -522,11 +593,26 @@ export default function DashboardPage() {
               patchRes?.data?.colorHex ??
               LIGHT_HEX;
             applyAndSetTheme(serverColor, "light");
+            writeThemeCache({
+              themeId: "light",
+              colorHex: serverColor,
+              label: "Light",
+            });
           } else {
             applyAndSetTheme(LIGHT_HEX, "light");
+            writeThemeCache({
+              themeId: "light",
+              colorHex: LIGHT_HEX,
+              label: "Light",
+            });
           }
         } catch {
           applyAndSetTheme(LIGHT_HEX, "light");
+          writeThemeCache({
+            themeId: "light",
+            colorHex: LIGHT_HEX,
+            label: "Light",
+          });
         }
       }
     } catch (err) {
@@ -674,7 +760,6 @@ export default function DashboardPage() {
               color.
             </p>
 
-            {/* REQUIRED: Name (label); themeId derived from this */}
             <div style={{ marginBottom: 10 }}>
               <label
                 htmlFor="hex-name"
