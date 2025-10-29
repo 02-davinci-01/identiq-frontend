@@ -271,6 +271,7 @@ export default function DashboardPage() {
     };
   }, [allSettled]);
 
+  // ---------- handle static / custom theme select ----------
   async function handleThemeSelect(
     id?: string,
     payload?: { themeId?: string; colorHex?: string }
@@ -287,12 +288,45 @@ export default function DashboardPage() {
     if (payloadColor) applyAndSetTheme(payloadColor, selectedIdForUI);
     else if (selectedIdForUI) setSelectedThemeId(selectedIdForUI);
 
+    /* --- BUILD PATCH BODY ACCORDING TO UPDATED DTO --- */
+    // New payload will include:
+    // - themeId (when available)
+    // - label (when available for custom themes)
+    // - colorHex (the hex being applied)  <-- change to `hex` if backend expects `hex`
     const body: any = {};
-    if (payload?.themeId) body.themeId = payload.themeId;
-    if (payload?.colorHex) body.colorHex = payload.colorHex;
-    if (!body.themeId && !body.colorHex && id) {
-      if (STATIC_THEME_IDS.includes(id)) body.themeId = id;
+
+    // If this is a static theme selection, only send themeId (backend will apply canonical color)
+    if (STATIC_THEME_IDS.includes(id ?? "")) {
+      body.themeId = id;
+    } else {
+      // For custom themes (or hex-based selections), include full info
+      // We try to find the matching customTheme (by hex or themeId) to include the label
+      const colorToUse = payloadColor;
+      const matchingCustom =
+        customThemes.find(
+          (c) =>
+            (c.hex &&
+              colorToUse &&
+              c.hex.toUpperCase() === colorToUse.toUpperCase()) ||
+            (payload?.themeId && c.themeId === payload.themeId)
+        ) ?? null;
+
+      // themeId: prefer payload.themeId, otherwise if we have a matching custom theme use its themeId,
+      // otherwise derive from id (which in our UI is the hex for custom entries)
+      body.themeId = payload?.themeId ?? matchingCustom?.themeId ?? id ?? null;
+
+      // label: prefer matching custom label (user-provided), otherwise fall back to themeId
+      if (matchingCustom?.label) body.label = matchingCustom.label;
+      else if (payload?.themeId) body.label = payload.themeId;
+      else if (body.themeId) body.label = String(body.themeId);
+
+      // colorHex: include the hex being applied
+      if (colorToUse) body.colorHex = colorToUse;
+      // If your backend expects `hex` instead of `colorHex`, replace the line above:
+      // if (colorToUse) body.hex = colorToUse;
     }
+
+    // If we still don't have anything to send, revert optimistic UI and abort
     if (!body.themeId && !body.colorHex) {
       if (prevColor) applyAndSetTheme(prevColor, prevThemeId);
       else setSelectedThemeId(prevThemeId);
@@ -313,12 +347,14 @@ export default function DashboardPage() {
 
     try {
       const res = await api.patch("/themes", body, { headers });
+      console.log;
 
       if (res.status >= 200 && res.status < 300) {
         const returned = res.data ?? {};
         const savedTheme = returned?.theme ?? returned;
         const serverThemeId = savedTheme?.themeId ?? selectedIdForUI;
-        const serverColor = savedTheme?.colorHex ?? savedTheme?.color ?? null;
+        const serverColor =
+          savedTheme?.colorHex ?? savedTheme?.color ?? savedTheme?.hex ?? null;
 
         if (serverColor) {
           const normalized = serverColor.toUpperCase().startsWith("#")
@@ -333,6 +369,7 @@ export default function DashboardPage() {
           setSelectedThemeId(serverThemeId);
         }
 
+        // refresh custom themes from server (new selection may have created/changed custom list)
         try {
           const customsRes = await api.get("/themes/custom", { headers });
           const items = customsRes?.data?.items ?? customsRes?.data ?? [];
@@ -393,7 +430,7 @@ export default function DashboardPage() {
     try {
       setCustomLoading(true);
 
-      // themeId is derived from name on the frontend
+      // themeId is derived from name on the frontend (you mentioned themeId === name)
       const derivedThemeId = hexName.trim();
 
       const payload: any = {
@@ -423,8 +460,6 @@ export default function DashboardPage() {
       setCustomThemes((prev) => [newItem, ...prev]);
       setLocalMessage("Custom theme added.");
       setHexModalOpen(false);
-
-      console.log(payload);
 
       // apply newly created theme (persist selection on server)
       await handleThemeSelect(newItem.hex, {

@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import styles from "@/app/dashboard/styles/dashboard.module.css";
 import { UsersTable } from "./components/UsersTable/UsersTable";
-import { ThemeChart } from "./components/ThemeChart/ThemeChart";
+import ThemeChart from "./components/ThemeChart/ThemeChart";
 import { RetryLog } from "./components/RetryLog/RetryLog";
 import { useInfiniteExperimentalUsers } from "./hooks/useInfiniteExperimentalUsers";
 import { applyThemeVars } from "./utils/themeUtils";

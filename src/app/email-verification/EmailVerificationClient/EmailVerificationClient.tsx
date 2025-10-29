@@ -9,7 +9,7 @@ type Status = "pending" | "success" | "failure";
 
 /**
  * Client-side verification component.
- * Uses useSearchParams/useRouter safely (client-only).
+ * On success: if server returns accessToken, store tokens + user in localStorage and go to /dashboard
  */
 export default function EmailVerificationClient() {
   const searchParams = useSearchParams();
@@ -29,7 +29,7 @@ export default function EmailVerificationClient() {
     if (!base) {
       setStatus("failure");
       setMessage(
-        "Missing backend configuration (NEXT_PUBLIC_BACKEND_URL). Contact support."
+        "Missing backend configuration (NEXT_PUBLIC_API_URL). Contact support."
       );
       const t = window.setTimeout(() => router.push("/auth/login"), 3500);
       return () => clearTimeout(t);
@@ -51,42 +51,116 @@ export default function EmailVerificationClient() {
     }
 
     let cancelled = false;
-    let redirectTid: number | undefined;
 
     (async () => {
       try {
         const res = await fetch(url, { method: "GET" });
 
-        // payload unknown -> coerce safely
-        let payload: unknown = null;
+        let payload: any = null;
         try {
           payload = await res.json();
+          console.log(payload);
         } catch {
           payload = null;
         }
 
         if (cancelled) return;
 
-        const p = (payload as Record<string, unknown> | null) ?? null;
-
         if (res.ok) {
-          const msg =
-            (p?.message as string) ||
-            (p?.msg as string) ||
-            (typeof p?.success === "string"
-              ? (p?.success as string)
-              : undefined) ||
-            "Email verified successfully.";
+          // If server returned tokens (accessToken), persist them and redirect to dashboard immediately
+          if (payload && payload.accessToken) {
+            console.debug("[EmailVerification] token payload:", payload);
+
+            // Normalize access token to "Bearer ..." form
+            const tokenStr = String(payload.accessToken ?? "");
+            const bearer = tokenStr;
+
+            // Keys we will clear to avoid stale tokens
+            const legacyKeys = [
+              "access_token",
+              "accessToken",
+              "token",
+              "jwt",
+              "authToken",
+              "auth_token",
+              "authorization",
+            ];
+
+            try {
+              // Remove legacy keys first
+              for (const k of legacyKeys) {
+                try {
+                  localStorage.removeItem(k);
+                } catch {
+                  // ignore
+                }
+              }
+
+              // Store canonical tokens & user
+              localStorage.setItem("access_token", bearer);
+              if (payload.refreshToken)
+                localStorage.setItem(
+                  "refresh_token",
+                  String(payload.refreshToken)
+                );
+              if (payload.jid) localStorage.setItem("jid", String(payload.jid));
+              if (payload.expiresIn)
+                localStorage.setItem("expires_in", String(payload.expiresIn));
+              if (payload.user)
+                localStorage.setItem("user", JSON.stringify(payload.user));
+
+              // Optionally store primary user email separately for quick access
+              try {
+                const u = payload.user;
+                if (u && u.email)
+                  localStorage.setItem("user_email", String(u.email));
+              } catch {
+                // ignore
+              }
+
+              setStatus("success");
+              setMessage(
+                String(
+                  payload.message ??
+                    "Email confirmed. Redirecting to dashboard..."
+                )
+              );
+
+              // Immediately navigate to dashboard now that tokens are stored
+              router.push("/dashboard");
+              return;
+            } catch (err) {
+              // If localStorage failed for any reason, log but still redirect with a success state
+              console.error(
+                "[EmailVerification] Failed to persist tokens to localStorage:",
+                err
+              );
+              setStatus("success");
+              setMessage("Email confirmed. Redirecting to dashboard...");
+              router.push("/dashboard");
+              return;
+            }
+          }
+
+          // No token returned: show success and redirect to login as before
+          const msg = String(
+            payload?.message ?? payload?.msg ?? "Email verified successfully."
+          );
           setStatus("success");
-          setMessage(String(msg));
+          setMessage(msg);
+          const t = window.setTimeout(() => router.push("/auth/login"), 2500);
+          return () => clearTimeout(t);
         } else {
-          const msg =
-            (p?.message as string) ||
-            (p?.error as string) ||
-            (p?.msg as string) ||
-            `Verification failed (${res.status}).`;
+          const msg = String(
+            payload?.message ??
+              payload?.error ??
+              payload?.msg ??
+              `Verification failed (${res.status}).`
+          );
           setStatus("failure");
-          setMessage(String(msg));
+          setMessage(msg);
+          const t = window.setTimeout(() => router.push("/auth/login"), 3500);
+          return () => clearTimeout(t);
         }
       } catch (err: unknown) {
         if (cancelled) return;
@@ -95,17 +169,14 @@ export default function EmailVerificationClient() {
         setMessage(
           msg || "Network error — could not reach verification endpoint."
         );
-      } finally {
-        // schedule redirect and keep a reference so we can clear it on cleanup
-        redirectTid = window.setTimeout(() => router.push("/auth/login"), 3500);
+        const t = window.setTimeout(() => router.push("/auth/login"), 3500);
+        return () => clearTimeout(t);
       }
     })();
 
     return () => {
       cancelled = true;
-      if (redirectTid) window.clearTimeout(redirectTid);
     };
-    // token and email are stable values from the search params; router is stable
   }, [token, email, router]);
 
   return (
@@ -170,7 +241,7 @@ export default function EmailVerificationClient() {
         </p>
       )}
 
-      <p className={styles.redirectNote}>Redirecting to login...</p>
+      <p className={styles.redirectNote}>Redirecting...</p>
     </div>
   );
 }

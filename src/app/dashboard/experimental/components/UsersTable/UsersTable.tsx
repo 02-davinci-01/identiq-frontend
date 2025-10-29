@@ -71,7 +71,7 @@ export function UsersTable({
                         border: "1px solid rgba(0,0,0,0.06)",
                       }}
                     />
-                    <div style={{ fontSize: 13 }}>{u.theme.name}</div>
+                    <div style={{ fontSize: 13 }}>{u.theme.color}</div>
                   </div>
                 </td>
                 <td style={{ padding: "12px 8px" }}>

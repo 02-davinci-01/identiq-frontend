@@ -22,13 +22,55 @@ function getAuthTokenFromStorage(): string | null {
   return null;
 }
 
-/**
- * Attempt to apply theme from the server first (GET /themes/me).
- * If server doesn't return a usable colorHex, then attempt to apply persisted object from localStorage.
- */
-async function applyServerOrPersistedTheme() {
+/** If payload includes a hex anywhere (like "Mustard 1 #47AAD1"), extract and normalize it. */
+function extractHexAnywhere(raw?: string | null): string | null {
+  if (!raw) return null;
+  const s = String(raw);
+  const m = s.match(/#?([0-9A-F]{6})/i);
+  if (!m) return null;
+  return `#${m[1].toUpperCase()}`;
+}
+
+/* normalize a single hex candidate to #RRGGBB or null */
+function normalizeHex(raw?: string | null): string | null {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  const m = s.match(/^#?([0-9A-F]{6})$/i);
+  if (!m) return null;
+  return `#${m[1].toUpperCase()}`;
+}
+
+/* Read canonical cache written by dashboard/page.tsx — returns normalized colorHex if valid */
+function readThemeCache(): {
+  themeId?: string | null;
+  colorHex: string;
+  label?: string | null;
+  updatedAt?: number;
+} | null {
   try {
-    // Try server first
+    if (typeof window === "undefined" || !window.localStorage) return null;
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const hex = normalizeHex(parsed?.colorHex ?? parsed?.hex ?? null);
+    if (!hex) return null;
+    return {
+      themeId: parsed?.themeId ?? null,
+      colorHex: hex,
+      label: parsed?.label ?? null,
+      updatedAt: parsed?.updatedAt ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * SERVER fallback: Attempt to apply theme from the server (GET /themes/me).
+ * This is used only when cache is absent/invalid.
+ */
+async function applyServerThemeFallback() {
+  try {
     const token = getAuthTokenFromStorage();
     if (token) {
       try {
@@ -41,65 +83,43 @@ async function applyServerOrPersistedTheme() {
           validateStatus: (s) => s >= 200 && s < 500,
         });
         if (res.status >= 200 && res.status < 300 && res.data) {
-          // Response shape may be { theme: {...} } or theme row object directly
           const payload = res.data?.theme ?? res.data;
-          const color =
+          const rawColor =
             payload?.colorHex ??
             payload?.color ??
             payload?.color_hex ??
             payload?.hex ??
+            payload?.themeId ??
             null;
-          if (color && /^#?[0-9A-F]{6}$/i.test(color)) {
-            const normalized = color.startsWith("#")
-              ? color.toUpperCase()
-              : `#${color.toUpperCase()}`;
+
+          const normalized = extractHexAnywhere(rawColor);
+          if (normalized) {
             applyThemeVars(normalized);
-            return;
+            return true;
           }
         }
       } catch (err) {
-        // server call failed — we'll fall back to local storage next
+        // fall through to returning false below
       }
     }
   } catch (err) {
     // ignore
   }
+  return false;
+}
 
-  // If we reach here, server didn't provide a usable color; apply persisted/local fallback
+/**
+ * CACHE-FIRST apply: prefer cached theme from localStorage (written by dashboard page).
+ * Returns true if applied, false otherwise.
+ */
+function applyThemeFromCache(): boolean {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-
-    // first try JSON persisted object (dashboard writes JSON)
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed && parsed.colorHex) {
-        const hex = String(parsed.colorHex).trim().toUpperCase();
-        if (/^#([0-9A-F]{6})$/.test(hex)) {
-          applyThemeVars(hex);
-          return;
-        }
-      }
-    } catch {
-      // not JSON — continue to fallback
-    }
-
-    const mapping: Record<string, string> = {
-      teal: "#2f6f66",
-      light: "#c96a2b",
-      dark: "#000000",
-    };
-    const maybe = raw.trim();
-    // hex?
-    if (/^#([0-9A-F]{6})$/i.test(maybe)) {
-      applyThemeVars(maybe.toUpperCase());
-      return;
-    }
-    // treat as static id
-    const key = maybe.toLowerCase();
-    applyThemeVars(mapping[key] ?? mapping.light);
-  } catch {
-    // ignore
+    const cached = readThemeCache();
+    if (!cached) return false;
+    applyThemeVars(cached.colorHex);
+    return true;
+  } catch (err) {
+    return false;
   }
 }
 
@@ -125,6 +145,9 @@ export default function UsersPageContainer() {
   const [deleting, setDeleting] = useState(false);
 
   const [userCount, setUserCount] = useState<number | null>(null);
+
+  // NEW: themeLoading indicates we're applying theme from cache/server
+  const [themeLoading, setThemeLoading] = useState<boolean>(true);
 
   const BACKEND_BASE =
     process.env.NEXT_PUBLIC_API_URL || "https://localhost:3001";
@@ -154,18 +177,48 @@ export default function UsersPageContainer() {
     fetchUserCount();
   }, [BACKEND_BASE]);
 
-  // On mount: attempt server -> fallback persisted theme. Listen for storage updates.
+  // On mount: attempt cache-first application; if cache missing, fall back to server.
   useEffect(() => {
-    applyServerOrPersistedTheme();
+    let mounted = true;
 
+    async function initTheme() {
+      setThemeLoading(true);
+      try {
+        // 1) try cached theme
+        const appliedFromCache = applyThemeFromCache();
+        if (appliedFromCache) {
+          // allow a tiny delay so users see a smooth transition (optional)
+          if (!mounted) return;
+          setThemeLoading(false);
+          return;
+        }
+
+        // 2) cache missing — attempt server fallback and apply if possible
+        const appliedFromServer = await applyServerThemeFallback();
+        if (!mounted) return;
+        setThemeLoading(false);
+        return appliedFromServer;
+      } catch (err) {
+        if (!mounted) return;
+        setThemeLoading(false);
+      }
+    }
+
+    initTheme();
+
+    // Also listen to storage events so theme changes on the dashboard page update this page
     function onStorage(e: StorageEvent) {
       if (e.key === STORAGE_KEY) {
-        applyServerOrPersistedTheme();
+        // re-apply from cache when dashboard writes new value
+        applyThemeFromCache();
       }
     }
 
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    return () => {
+      mounted = false;
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   // current user detection (unchanged)
@@ -270,7 +323,49 @@ export default function UsersPageContainer() {
   }
 
   return (
-    <div className={styles.contentContainer2}>
+    <div className={styles.contentContainer2} style={{ position: "relative" }}>
+      {/* Theme loading spinner overlay */}
+      {themeLoading && (
+        <div
+          aria-hidden={!themeLoading}
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 1500,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(255,255,255,0.6)",
+            pointerEvents: "none",
+          }}
+        >
+          <div
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 999,
+              background: "rgba(0,0,0,0.04)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
+            }}
+          >
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                border: "4px solid rgba(0,0,0,0.08)",
+                borderTop: "4px solid rgba(0,0,0,0.6)",
+                borderRadius: "50%",
+                animation: "spin 0.8s linear infinite",
+              }}
+            />
+          </div>
+          <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
+        </div>
+      )}
+
       <div
         className={styles.infoRow}
         style={{ marginBottom: 18, alignItems: "center" }}
