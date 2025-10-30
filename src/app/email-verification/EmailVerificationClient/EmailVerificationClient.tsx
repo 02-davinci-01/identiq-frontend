@@ -56,7 +56,7 @@ export default function EmailVerificationClient() {
       try {
         const res = await fetch(url, { method: "GET" });
 
-        let payload: any = null;
+        let payload = null;
         try {
           payload = await res.json();
           console.log(payload);

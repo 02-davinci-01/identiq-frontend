@@ -98,11 +98,11 @@ async function applyServerThemeFallback() {
             return true;
           }
         }
-      } catch (err) {
+      } catch {
         // fall through to returning false below
       }
     }
-  } catch (err) {
+  } catch {
     // ignore
   }
   return false;
@@ -118,7 +118,7 @@ function applyThemeFromCache(): boolean {
     if (!cached) return false;
     applyThemeVars(cached.colorHex);
     return true;
-  } catch (err) {
+  } catch {
     return false;
   }
 }
@@ -133,7 +133,7 @@ export default function UsersPageContainer() {
     secondsLeft,
     manualRefresh,
     deleteUser,
-    themeDistribution, // still available if you want to use it elsewhere
+    // themeDistribution removed because it was unused
   } = useInfiniteUsers(6);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -168,8 +168,8 @@ export default function UsersPageContainer() {
           console.warn("Unexpected response from /users/count:", res.data);
           setUserCount(null);
         }
-      } catch (err) {
-        console.error("Failed to fetch user count:", err);
+      } catch {
+        console.error("Failed to fetch user count");
         setUserCount(null);
       }
     }
@@ -198,7 +198,7 @@ export default function UsersPageContainer() {
         if (!mounted) return;
         setThemeLoading(false);
         return appliedFromServer;
-      } catch (err) {
+      } catch {
         if (!mounted) return;
         setThemeLoading(false);
       }

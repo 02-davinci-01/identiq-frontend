@@ -68,11 +68,34 @@ function getAuthHeader(): Record<string, string> {
 }
 
 function getBackendBase(): string {
+  // safe access to window-injected env var without `any`
   const envBase =
-    (process.env.NEXT_PUBLIC_API_URL as string) ||
-    (window as any).__NEXT_PUBLIC_API_URL__;
+    (process.env.NEXT_PUBLIC_API_URL as string | undefined) ||
+    (window as unknown as Record<string, string | undefined>)
+      .__NEXT_PUBLIC_API_URL__;
   if (envBase && envBase.length > 0) return envBase.replace(/\/$/, "");
   return window.location.origin;
+}
+
+/* ---------- small helpers to safely handle unknowns ---------- */
+function asString(v: unknown, fallback = ""): string {
+  if (v === null || v === undefined) return fallback;
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return fallback;
+  }
+}
+
+function asNumber(v: unknown, fallback = 0): number {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  }
+  return fallback;
 }
 
 export default function ThemeChart({ users }: Props) {
@@ -92,7 +115,7 @@ export default function ThemeChart({ users }: Props) {
       const headers = getAuthHeader();
 
       try {
-        const res = await axios.get(url, {
+        const res = await axios.get<unknown>(url, {
           headers,
           validateStatus: (s) => s >= 200 && s < 500,
           timeout: 8000,
@@ -105,15 +128,28 @@ export default function ThemeChart({ users }: Props) {
           return;
         }
 
-        const payload = res.data;
+        const payload = res.data as unknown;
 
         // Preferred: payload.items array (canonical)
-        if (payload && Array.isArray(payload.items)) {
-          const items: DistItem[] = payload.items.map((it: any) => ({
-            label: String(it.label ?? "Unknown"),
-            count: Number(it.count ?? 0),
-            colorHex: normalizeHex(it.colorHex ?? it.hex ?? it.color) ?? "",
-          }));
+        if (
+          payload &&
+          typeof payload === "object" &&
+          Array.isArray((payload as Record<string, unknown>).items)
+        ) {
+          const itemsRaw = (payload as Record<string, unknown>)
+            .items as unknown[];
+          const items: DistItem[] = itemsRaw.map((it) => {
+            const obj = it as Record<string, unknown>;
+            return {
+              label: asString(
+                obj.label ?? obj.name ?? obj.themeId ?? "Unknown"
+              ),
+              count: asNumber(obj.count ?? obj.value ?? 0),
+              colorHex:
+                normalizeHex(asString(obj.colorHex ?? obj.hex ?? obj.color)) ??
+                "",
+            };
+          });
 
           const parsed = items
             .map((it) => {
@@ -136,16 +172,21 @@ export default function ThemeChart({ users }: Props) {
         }
 
         // Backward compatibility: payload.counts object (label -> number)
-        if (payload && payload.counts && typeof payload.counts === "object") {
-          const countsObj: Record<string, any> = payload.counts;
+        if (
+          payload &&
+          typeof payload === "object" &&
+          (payload as Record<string, unknown>).counts &&
+          typeof (payload as Record<string, unknown>).counts === "object"
+        ) {
+          const countsObj = (payload as Record<string, unknown>)
+            .counts as Record<string, unknown>;
           const parsed = Object.entries(countsObj).map(([label, val]) => {
             const name = humanLabelFromId(label);
-            // try to extract hex from label itself, else generate
             const explicit = extractHexAnywhere(label) ?? null;
             const hexUsed = explicit ?? colorFromString(name);
             return {
               name,
-              value: Number(val ?? 0),
+              value: asNumber(val, 0),
               color: hexUsed,
               hexUsed,
             } as Row;
@@ -155,15 +196,21 @@ export default function ThemeChart({ users }: Props) {
           return;
         }
 
-        // Fallback: if service returned items nested or an unexpected shape, try to salvage
-        if (payload && Array.isArray(payload)) {
-          const parsed = payload
-            .map((it: any) => {
-              const label = it.label ?? it.themeId ?? it.name ?? String(it);
+        // Fallback: if service returned items array or an unexpected shape, try to salvage
+        if (Array.isArray(payload)) {
+          const arr = payload as unknown[];
+          const parsed = arr
+            .map((it) => {
+              const obj = it as Record<string, unknown>;
+              const label = asString(
+                obj.label ?? obj.themeId ?? obj.name ?? obj
+              );
               const name = humanLabelFromId(label);
-              const val = Number(it.count ?? it.value ?? 0);
+              const val = asNumber(obj.count ?? obj.value ?? 0);
               const explicit =
-                normalizeHex(it.colorHex ?? it.color ?? it.hex) ??
+                normalizeHex(
+                  asString(obj.colorHex ?? obj.color ?? obj.hex ?? obj.hexCode)
+                ) ??
                 extractHexAnywhere(label) ??
                 null;
               const hexUsed = explicit ?? colorFromString(name);
@@ -180,29 +227,35 @@ export default function ThemeChart({ users }: Props) {
           return;
         }
 
-        // If nothing matched, set error but still try to render users-derived distribution if provided
+        // Fallback to client-side aggregation from users prop
         if (users && users.length > 0) {
-          // fall back to client-side aggregation from users prop
           const map = new Map<
             string,
             { count: number; hexCandidates: string[] }
           >();
           users.forEach((u) => {
-            // cast theme to any here so TS doesn't complain about missing props
-            const themeAny: any = (u as any).theme ?? {};
+            // safe access to a possible theme object on user
+            const themeCandidate =
+              (u as unknown as { theme?: unknown }).theme ??
+              ({} as Record<string, unknown>);
             const label =
-              (themeAny.label ?? themeAny.name ?? themeAny.themeId ?? "Unknown")
-                .toString()
-                .trim() || "Unknown";
+              asString(
+                (themeCandidate as Record<string, unknown>).label ??
+                  (themeCandidate as Record<string, unknown>).name ??
+                  (themeCandidate as Record<string, unknown>).themeId ??
+                  "Unknown"
+              ).trim() || "Unknown";
 
-            const candidates = [
-              normalizeHex(
-                themeAny.colorHex ??
-                  themeAny.color ??
-                  themeAny.hex ??
-                  themeAny.hexCode
-              ) ?? null,
-            ].filter(Boolean) as string[];
+            const candidateHex = normalizeHex(
+              asString(
+                (themeCandidate as Record<string, unknown>).colorHex ??
+                  (themeCandidate as Record<string, unknown>).color ??
+                  (themeCandidate as Record<string, unknown>).hex ??
+                  (themeCandidate as Record<string, unknown>).hexCode
+              )
+            );
+
+            const candidates = candidateHex ? [candidateHex] : [];
 
             const existing = map.get(label);
             if (existing) {
@@ -240,9 +293,12 @@ export default function ThemeChart({ users }: Props) {
         setError("Malformed distribution response");
         setRows([]);
         setLoading(false);
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!mounted) return;
-        setError(err?.message ?? "Failed to fetch distribution");
+        const msg =
+          (err && typeof err === "object" && "message" in err && err.message) ||
+          String(err ?? "Failed to fetch distribution");
+        setError(String(msg));
         setLoading(false);
       }
     }
@@ -261,11 +317,18 @@ export default function ThemeChart({ users }: Props) {
   );
   const total = sorted.reduce((s, it) => s + it.value, 0) || 1;
 
-  const renderTooltip = (props: any) => {
+  type TooltipLikeProps = {
+    active?: boolean;
+    payload?: unknown[];
+  };
+
+  const renderTooltip = (props: TooltipLikeProps) => {
     const { active, payload } = props;
     if (!active || !payload || !Array.isArray(payload) || payload.length === 0)
       return null;
-    const d = payload[0].payload as Row;
+    const first = payload[0] as Record<string, unknown>;
+    const d = first.payload as unknown as Row;
+    if (!d) return null;
     const percent = ((d.value / total) * 100).toFixed(1);
     return (
       <div
@@ -325,7 +388,9 @@ export default function ThemeChart({ users }: Props) {
                     <Cell key={`c-${idx}`} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip content={renderTooltip as any} />
+                <Tooltip
+                  content={renderTooltip as unknown as React.ReactElement}
+                />
               </PieChart>
             </ResponsiveContainer>
           </div>

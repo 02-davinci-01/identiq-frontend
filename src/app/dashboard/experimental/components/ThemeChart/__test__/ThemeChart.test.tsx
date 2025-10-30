@@ -3,6 +3,7 @@ import React from "react";
 import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import ThemeChart from "../ThemeChart";
 import axios from "axios";
+import type { UserView } from "../../../hooks/useInfiniteExperimentalUsers";
 
 jest.mock("axios");
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -11,10 +12,11 @@ const mockedAxios = axios as jest.Mocked<typeof axios>;
  * Small helper: basic users fixture for client-side fallback aggregation.
  * Each user has a .theme object with various possible hex fields to test normalization.
  */
+
 const usersFixture = [
-  { id: "u1", name: "A", theme: { label: "Light", colorHex: "#112233" } },
-  { id: "u2", name: "B", theme: { label: "Light", color: "#112233" } },
-  { id: "u3", name: "C", theme: { label: "Dark", colorHex: "#000000" } },
+  { id: "u1", name: "A", theme: { name: "Light", colorHex: "#112233" } },
+  { id: "u2", name: "B", theme: { name: "Light", color: "#112233" } },
+  { id: "u3", name: "C", theme: { name: "Dark", colorHex: "#000000" } },
 ];
 
 describe("ThemeChart", () => {
@@ -80,7 +82,7 @@ describe("ThemeChart", () => {
     // server returns an empty object (no items/no counts)
     mockedAxios.get.mockResolvedValue({ status: 200, data: {} });
 
-    render(<ThemeChart users={usersFixture as any} />);
+    render(<ThemeChart users={usersFixture as UserView[]} />);
 
     // should render aggregated labels "Light" and "Dark"
     await waitFor(() => {

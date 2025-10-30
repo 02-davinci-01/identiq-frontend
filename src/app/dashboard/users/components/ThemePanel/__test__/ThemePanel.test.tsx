@@ -10,7 +10,7 @@ class ResizeObserverMock {
   unobserve() {}
   disconnect() {}
 }
-(global as any).ResizeObserver = ResizeObserverMock;
+global.ResizeObserver = ResizeObserverMock;
 
 jest.mock("axios");
 const mockedAxios = axios as jest.Mocked<typeof axios>;

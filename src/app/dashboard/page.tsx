@@ -87,7 +87,8 @@ function writeThemeCache(theme: {
 }
 
 /* --- read canonical cache from localStorage --- */
-function readThemeCache(): {
+/* kept but renamed to avoid unused-var lint while preserving logic for future use */
+function _readThemeCache(): {
   themeId?: string | null;
   colorHex: string;
   label?: string | null;
@@ -121,7 +122,7 @@ export default function DashboardPage() {
 
   // custom themes from server
   const [customThemes, setCustomThemes] = useState<CustomThemeItem[]>([]);
-  const [customLoading, setCustomLoading] = useState(false);
+  const [, setCustomLoading] = useState(false); // only setter used in logic — drop unused variable to satisfy linter
 
   // modal state for adding a theme (now only asks for name)
   const [hexModalOpen, setHexModalOpen] = useState(false);
@@ -294,13 +295,19 @@ export default function DashboardPage() {
         [];
       if (
         Array.isArray(serverCustomsFromRow) &&
-        (!customQuery.isSuccess || (customQuery.data as any[]).length === 0)
+        (!customQuery.isSuccess ||
+          !(Array.isArray(customQuery.data) && customQuery.data.length > 0))
       ) {
         setCustomThemes(serverCustomsFromRow);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [themeQuery.isSuccess, themeQuery.data]);
+    // include customQuery pieces to satisfy exhaustive-deps
+  }, [
+    themeQuery.isSuccess,
+    themeQuery.data,
+    customQuery?.isSuccess,
+    customQuery?.data,
+  ]);
 
   useEffect(() => {
     if (customQuery && customQuery.isSuccess) {
@@ -358,10 +365,10 @@ export default function DashboardPage() {
     if (payloadColor) applyAndSetTheme(payloadColor, selectedIdForUI);
     else if (selectedIdForUI) setSelectedThemeId(selectedIdForUI);
 
-    const body: any = {};
+    const body: Record<string, unknown> = {};
 
     if (STATIC_THEME_IDS.includes(id ?? "")) {
-      body.themeId = id;
+      (body as Record<string, string>).themeId = id ?? "";
     } else {
       const colorToUse = payloadColor;
       const matchingCustom =
@@ -373,16 +380,27 @@ export default function DashboardPage() {
             (payload?.themeId && c.themeId === payload.themeId)
         ) ?? null;
 
-      body.themeId = payload?.themeId ?? matchingCustom?.themeId ?? id ?? null;
+      (body as Record<string, unknown>).themeId =
+        payload?.themeId ?? matchingCustom?.themeId ?? id ?? null;
 
-      if (matchingCustom?.label) body.label = matchingCustom.label;
-      else if (payload?.themeId) body.label = payload.themeId;
-      else if (body.themeId) body.label = String(body.themeId);
+      if (matchingCustom?.label)
+        (body as Record<string, unknown>).label = matchingCustom.label;
+      else if (payload?.themeId)
+        (body as Record<string, unknown>).label = payload.themeId;
+      else if ((body as Record<string, unknown>).themeId)
+        (body as Record<string, unknown>).label = String(
+          (body as Record<string, unknown>).themeId
+        );
 
-      if (colorToUse) body.colorHex = colorToUse;
+      if (colorToUse) (body as Record<string, unknown>).colorHex = colorToUse;
     }
 
-    if (!body.themeId && !body.colorHex) {
+    if (
+      !(
+        ("themeId" in body && body.themeId) ||
+        ("colorHex" in body && body.colorHex)
+      )
+    ) {
       if (prevColor) applyAndSetTheme(prevColor, prevThemeId);
       else setSelectedThemeId(prevThemeId);
       return;
@@ -410,7 +428,8 @@ export default function DashboardPage() {
         const serverThemeId = savedTheme?.themeId ?? selectedIdForUI;
         const serverColor =
           savedTheme?.colorHex ?? savedTheme?.color ?? savedTheme?.hex ?? null;
-        const serverLabel = savedTheme?.label ?? body.label ?? null;
+        const serverLabel =
+          savedTheme?.label ?? (body as Record<string, unknown>).label ?? null;
 
         if (serverColor) {
           const normalized = serverColor.toUpperCase().startsWith("#")
@@ -448,18 +467,20 @@ export default function DashboardPage() {
           setCustomThemes(Array.isArray(items) ? items : []);
         } catch (err) {
           // ignore
+          console.error("refresh custom themes failed", err);
         }
       } else {
         if (prevColor) applyAndSetTheme(prevColor, prevThemeId);
         else setSelectedThemeId(prevThemeId);
         alert("Failed to update theme on server");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (prevColor) applyAndSetTheme(prevColor, prevThemeId);
       else setSelectedThemeId(prevThemeId);
       alert(
         "Failed to update theme (network/server error). Check console for details."
       );
+      console.error(err);
     }
   }
 
@@ -505,7 +526,7 @@ export default function DashboardPage() {
 
       const derivedThemeId = hexName.trim();
 
-      const payload: any = {
+      const payload: Record<string, string> = {
         themeId: derivedThemeId,
         label: derivedThemeId,
         hex: normalized,
@@ -537,10 +558,20 @@ export default function DashboardPage() {
         colorHex: newItem.hex,
         themeId: newItem.themeId,
       });
-    } catch (err: any) {
-      const msg =
-        err?.response?.data?.message || err?.message || "Failed to submit";
-      setHexError(msg);
+    } catch (err: unknown) {
+      if (typeof err === "object" && err !== null) {
+        const e = err as Record<string, unknown>;
+        const response = e["response"] as Record<string, unknown> | undefined;
+        const data = response?.["data"] as Record<string, unknown> | undefined;
+        const message = data?.["message"] as string | undefined;
+        setHexError(
+          message ?? (err instanceof Error ? err.message : "Failed to submit")
+        );
+      } else {
+        setHexError(
+          err instanceof Error ? err.message : String(err ?? "Failed to submit")
+        );
+      }
     } finally {
       setPosting(false);
       setCustomLoading(false);
@@ -559,14 +590,11 @@ export default function DashboardPage() {
     );
 
     try {
-      const res = await api.delete(
-        `/themes/custom/${encodeURIComponent(withoutHash)}`,
-        {
-          headers: {
-            Authorization: getToken() ? `Bearer ${getToken()}` : undefined,
-          },
-        }
-      );
+      await api.delete(`/themes/custom/${encodeURIComponent(withoutHash)}`, {
+        headers: {
+          Authorization: getToken() ? `Bearer ${getToken()}` : undefined,
+        },
+      });
 
       // if deleted hex was currently active, fall back to light (and update cache)
       const normalized = hex.startsWith("#")
@@ -606,7 +634,8 @@ export default function DashboardPage() {
               label: "Light",
             });
           }
-        } catch {
+        } catch (e) {
+          console.error("failed to patch to light after delete", e);
           applyAndSetTheme(LIGHT_HEX, "light");
           writeThemeCache({
             themeId: "light",

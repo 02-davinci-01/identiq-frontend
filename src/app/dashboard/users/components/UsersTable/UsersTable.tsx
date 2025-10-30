@@ -42,15 +42,15 @@ function hslToHex(h: number, s: number, l: number): string {
 }
 
 /** Return display color hex for a user.theme object */
-function getThemeColor(theme: any) {
+function getThemeColor(theme: UserView["theme"]): string {
   if (!theme) return "#CCCCCC";
-  const candidates = [theme.color, theme.colorHex, theme.hex, theme.hexCode];
+  const candidates = [theme.color];
   for (const c of candidates) {
     const normalized = normalizeHex(c);
     if (normalized) return normalized;
   }
   // fallback: deterministic color from user's id or name
-  const seed = theme.name ?? theme.label ?? "";
+  const seed = theme.name ?? "";
   if (seed) return colorFromString(String(seed));
   return "#CCCCCC";
 }

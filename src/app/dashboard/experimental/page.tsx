@@ -57,7 +57,7 @@ function applyPersistedOrFallbackTheme() {
     applyThemeVars(mapping[key] ?? mapping.light);
   } catch (err) {
     // swallow errors — don't crash the page for theme issues
-    // console.warn("apply theme failed", err);
+    console.warn("apply theme failed", err);
   }
 }
 

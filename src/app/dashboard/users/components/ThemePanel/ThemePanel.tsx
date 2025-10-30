@@ -58,19 +58,54 @@ function humanLabelFromId(id?: string | null) {
 
 function getAuthHeader(): Record<string, string> {
   const keys = ["access_token", "accessToken", "token", "jwt", "authToken"];
-  for (const k of keys) {
-    const v = localStorage.getItem(k);
-    if (v) return { Authorization: v.startsWith("Bearer") ? v : `Bearer ${v}` };
+  try {
+    for (const k of keys) {
+      const v = typeof window !== "undefined" ? localStorage.getItem(k) : null;
+      if (v)
+        return { Authorization: v.startsWith("Bearer") ? v : `Bearer ${v}` };
+    }
+  } catch {
+    // ignore localStorage read errors
   }
   return {};
 }
 
 function getBackendBase(): string {
   const envBase =
-    (process.env.NEXT_PUBLIC_API_URL as string) ||
-    (window as any).__NEXT_PUBLIC_API_URL__;
-  if (envBase && envBase.length > 0) return envBase.replace(/\/$/, "");
-  return window.location.origin;
+    (process.env.NEXT_PUBLIC_API_URL as string | undefined) ??
+    // safely get window-injected var if available
+    (typeof window !== "undefined"
+      ? (window as unknown as Record<string, unknown>).__NEXT_PUBLIC_API_URL__
+      : undefined);
+  if (typeof envBase === "string" && envBase.length > 0)
+    return envBase.replace(/\/$/, "");
+  return typeof window !== "undefined" ? window.location.origin : "";
+}
+
+/* safe error extractor for catch (err: unknown) */
+function extractErrorMessage(err: unknown): string {
+  if (err === null || err === undefined) return "Unknown error";
+  if (typeof err === "string") return err;
+  if (typeof err === "object") {
+    const e = err as Record<string, unknown>;
+    const resp = e.response as Record<string, unknown> | undefined;
+    if (resp && resp.data) {
+      const data = resp.data as Record<string, unknown>;
+      if (typeof data.message === "string") return data.message;
+      try {
+        return JSON.stringify(data);
+      } catch {
+        // fallthrough
+      }
+    }
+    if (typeof e.message === "string") return e.message;
+    try {
+      return JSON.stringify(e);
+    } catch {
+      return "Unknown error";
+    }
+  }
+  return String(err);
 }
 
 /**
@@ -104,7 +139,7 @@ export default function ThemePanel() {
 
       for (const url of tryUrls) {
         try {
-          const res = await axios.get(url, {
+          const res = await axios.get<unknown>(url, {
             headers,
             validateStatus: (s) => s >= 200 && s < 500,
             timeout: 8000,
@@ -113,21 +148,33 @@ export default function ThemePanel() {
           if (!mounted) return;
           if (res.status < 200 || res.status >= 300) continue;
 
-          const payload = res.data;
+          const payload = res.data as unknown;
+          // debug left intentionally to help in case of unexpected shapes
+
           console.debug("[ThemePanel] response from", url, res.status, payload);
 
           // --- 1) NEW canonical shape: { ok: true, items: [{ label, count, colorHex }] } ---
-          if (payload && payload.ok && Array.isArray(payload.items)) {
-            const items = payload.items.map((it: any) => {
-              const rawLabel = it.label ?? it.themeId ?? "Unknown";
-              const name = humanLabelFromId(rawLabel);
-              const count = Number(it.count ?? it.value ?? 0);
-              // prefer explicit colorHex from service; normalize it if present
+          if (
+            payload &&
+            typeof payload === "object" &&
+            (payload as Record<string, unknown>).ok === true &&
+            Array.isArray((payload as Record<string, unknown>).items)
+          ) {
+            const itemsRaw = (payload as Record<string, unknown>)
+              .items as unknown[];
+            const items = itemsRaw.map((it) => {
+              const obj = (it ?? {}) as Record<string, unknown>;
+              const rawLabel = obj.label ?? obj.themeId ?? "Unknown";
+              const name = humanLabelFromId(String(rawLabel));
+              const count = Number(obj.count ?? obj.value ?? 0);
               const explicitHex =
-                extractHexAnywhere(it.colorHex ?? it.color ?? it.hex ?? null) ??
-                normalizeHexFull(it.colorHex ?? it.color ?? it.hex ?? null);
-              const hexCandidate = explicitHex ?? null;
-              const hexUsed = hexCandidate ?? colorFromString(name);
+                extractHexAnywhere(
+                  (obj.colorHex ?? obj.color ?? obj.hex) as string | null
+                ) ??
+                normalizeHexFull(
+                  (obj.colorHex ?? obj.color ?? obj.hex) as string | null
+                );
+              const hexUsed = explicitHex ?? colorFromString(name);
               return {
                 name,
                 value: Number.isFinite(count) ? count : 0,
@@ -144,13 +191,13 @@ export default function ThemePanel() {
           if (
             payload &&
             typeof payload === "object" &&
-            payload.counts &&
-            typeof payload.counts === "object"
+            "counts" in (payload as Record<string, unknown>) &&
+            typeof (payload as Record<string, unknown>).counts === "object"
           ) {
-            const countsObj: Record<string, any> = payload.counts;
+            const countsObj = (payload as Record<string, unknown>)
+              .counts as Record<string, unknown>;
             const items = Object.entries(countsObj).map(([label, val]) => {
               const numeric = Number(val ?? 0);
-              // Try to extract hex anywhere in the label first
               const normalizedHex =
                 extractHexAnywhere(label) ?? normalizeHexFull(label);
               const name =
@@ -174,10 +221,11 @@ export default function ThemePanel() {
             typeof payload === "object" &&
             !Array.isArray(payload)
           ) {
-            const maybeCounts = payload as Record<string, any>;
-            const allNumeric = Object.values(maybeCounts).every(
-              (v) => typeof v === "number" || !isNaN(Number(v))
-            );
+            const maybeCounts = payload as Record<string, unknown>;
+            const values = Object.values(maybeCounts);
+            const allNumeric =
+              values.length > 0 &&
+              values.every((v) => typeof v === "number" || !isNaN(Number(v)));
             if (allNumeric && Object.keys(maybeCounts).length > 0) {
               const items = Object.entries(maybeCounts).map(([label, val]) => {
                 const numeric = Number(val ?? 0);
@@ -203,15 +251,23 @@ export default function ThemePanel() {
 
           // --- 4) Fallback: raw array of rows (older APIs) ---
           if (Array.isArray(payload)) {
-            const items = payload.map((it: any) => {
-              const rawLabel = it.label ?? it.themeId ?? it.hex ?? String(it);
-              const name = humanLabelFromId(rawLabel);
-              const count = Number(it.count ?? it.value ?? 0);
+            const arr = payload as unknown[];
+            const items = arr.map((it) => {
+              const obj = (it ?? {}) as Record<string, unknown>;
+              const rawLabel =
+                obj.label ?? obj.themeId ?? obj.hex ?? String(obj);
+              const name = humanLabelFromId(String(rawLabel));
+              const count = Number(obj.count ?? obj.value ?? 0);
               const explicit =
-                extractHexAnywhere(it.colorHex ?? it.color ?? it.hex ?? null) ??
-                normalizeHexFull(it.colorHex ?? it.color ?? it.hex ?? null);
+                extractHexAnywhere(
+                  (obj.colorHex ?? obj.color ?? obj.hex) as string | null
+                ) ??
+                normalizeHexFull(
+                  (obj.colorHex ?? obj.color ?? obj.hex) as string | null
+                );
               const fromLabel =
-                extractHexAnywhere(rawLabel) ?? normalizeHexFull(rawLabel);
+                extractHexAnywhere(String(rawLabel)) ??
+                normalizeHexFull(String(rawLabel));
               const hexCandidate = explicit ?? fromLabel ?? null;
               const hexUsed = hexCandidate ?? colorFromString(name);
               return {
@@ -226,17 +282,21 @@ export default function ThemePanel() {
             return;
           }
 
+          // if we reach here, try next url
+
           console.debug(
             "[ThemePanel] unexpected payload shape from",
             url,
             payload
           );
-        } catch (err: any) {
+        } catch (err: unknown) {
+          // safe logging for unknown error
+
           console.debug(
             "[ThemePanel] request to",
             url,
             "failed:",
-            err?.message ?? err
+            extractErrorMessage(err)
           );
         }
       } // end for urls
@@ -258,11 +318,14 @@ export default function ThemePanel() {
   const total = sorted.reduce((s, it) => s + it.value, 0) || 1;
 
   // custom tooltip to show count + percent
-  const renderTooltip = (props: any) => {
+  type TooltipProps = { active?: boolean; payload?: unknown[] };
+  const renderTooltip = (props: TooltipProps) => {
     const { active, payload } = props;
     if (!active || !payload || !Array.isArray(payload) || payload.length === 0)
       return null;
-    const d = payload[0].payload as DistRow;
+    const first = payload[0] as Record<string, unknown>;
+    const d = first.payload as unknown as DistRow | undefined;
+    if (!d) return null;
     const percent = ((d.value / total) * 100).toFixed(1);
     return (
       <div
@@ -312,7 +375,9 @@ export default function ThemePanel() {
                     <Cell key={`c-${idx}`} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip content={renderTooltip as any} />
+                <Tooltip
+                  content={renderTooltip as unknown as React.ReactElement}
+                />
               </PieChart>
             </ResponsiveContainer>
           </div>
