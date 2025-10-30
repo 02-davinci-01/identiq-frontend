@@ -211,3 +211,176 @@
   stroke-width: 2;
   stroke: currentColor;
 }
+
+/* --- CAPTCHA fixed layout & themed refresh/button styles --- */
+
+/* fixed-size captcha container to avoid layout jumps */
+.captchaBox {
+  position: relative;
+  width: 160px; /* same width as captcha generation */
+  height: 60px; /* same height as captcha generation */
+  min-width: 160px;
+  min-height: 60px;
+  border-radius: 8px;
+  background: var(--bg-page);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+/* state when loading */
+.captchaLoadingState {
+  opacity: 0.6;
+}
+
+/* inner SVG container - force svg to fill fixed box */
+.captchaSvg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  line-height: 0;
+}
+
+/* image wrapper when you receive an image url */
+.captchaImgWrap {
+  width: 100%;
+  height: 100%;
+  display: block;
+  line-height: 0;
+}
+
+/* placeholder while missing */
+.captchaPlaceholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 13px;
+}
+
+/* overlay refresh button (visually on top of captcha) */
+.captchaRefreshOverlay {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-page);
+  color: var(--fg);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+}
+
+/* disabled state */
+.captchaRefreshOverlay[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* inline refresh control (keeps visual parity with theme) */
+.captchaControls {
+  margin-left: 12px;
+  display: flex;
+  align-items: center;
+}
+
+.captchaRefreshInline {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+}
+
+/* small text span in refresh controls */
+.captchaRefreshText {
+  font-size: 13px;
+  display: inline-block;
+}
+
+/* breadcrumb message under captcha */
+.captchaBreadcrumb {
+  margin-top: 8px;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.captchaBreadcrumbAction {
+  border: none;
+  background: transparent;
+  text-decoration: underline;
+  cursor: pointer;
+  color: var(--accent);
+  padding: 0;
+  margin-left: 6px;
+}
+
+/* captcha input spacing when placed under the box */
+.captchaInput {
+  margin-top: 8px;
+}
+
+/* --- TOAST styles --- */
+.toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  min-width: 220px;
+  max-width: 360px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  background: var(
+    --fg
+  ); /* invert for contrast if fg is dark; adjust if needed */
+  color: var(--bg-page);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.toastTitle {
+  font-weight: 600;
+}
+
+.toastMsg {
+  opacity: 0.95;
+}
+
+.toastClose {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 6px;
+  font-size: 16px;
+}
+
+/* small responsive tweak so the captcha doesn't overflow on tiny screens */
+@media (max-width: 420px) {
+  .captchaBox {
+    transform: scale(0.9);
+    transform-origin: left top;
+  }
+
+  .captchaControls {
+    margin-left: 8px;
+  }
+}

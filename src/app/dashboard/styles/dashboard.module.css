@@ -494,3 +494,106 @@
   flex-direction: column;
   gap: 6px;
 }
+
+/* -------------------------
+   Modal + small helpers
+   ------------------------- */
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1800;
+  background: rgba(12, 12, 12, 0.36);
+  backdrop-filter: blur(3px);
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+/* modal dialog box */
+.modalDialog {
+  width: 420px;
+  max-width: calc(100% - 40px);
+  background: var(--panel);
+  color: var(--fg);
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+/* small input helper (if you want to swap to your shared input class) */
+.modalDialog .input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 15px;
+  box-sizing: border-box;
+}
+
+/* make the date-button visually identical to .date (so styling is reused)
+   if required: .date already exists; ensure buttons don't inherit default focus outline */
+.date {
+  height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-weight: 700;
+  font-family: var(--font-secondary);
+  font-size: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  background: var(--top-left-bg);
+  color: var(--accent-foreground);
+  padding: 0 12px;
+  border: none;
+}
+
+/* preserve focus accessibility but match visual style */
+.date:focus {
+  outline: 3px solid rgba(var(--accent-rgb), 0.14);
+  outline-offset: 2px;
+}
+
+/* small responsive tweak */
+@media (max-width: 520px) {
+  .modalDialog {
+    width: 100%;
+    padding: 14px;
+    border-radius: 10px;
+  }
+}
+/* Add-theme button — slightly elevated, gradient and distinct */
+/* Add-theme button — fixed high-contrast color so it ALWAYS reads as a button */
+:local(.addThemeBtn) {
+  background: #ff006e !important; /* fixed, high-contrast magenta */
+  color: #ffffff !important;
+  box-shadow: 0 12px 30px rgba(255, 0, 110, 0.18);
+  transform: translateY(-2px);
+  cursor: pointer;
+  text-align: center;
+  border: none;
+  padding: 10px 14px;
+  border-radius: 12px;
+  min-width: 120px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+:local(.addThemeBtn):hover {
+  transform: translateY(-4px);
+  box-shadow: 0 18px 40px rgba(255, 0, 110, 0.22);
+}
+
+:local(.addThemeBtn):focus {
+  outline: 3px solid rgba(255, 0, 110, 0.18);
+  outline-offset: 2px;
+}

@@ -1,53 +1,116 @@
-/**
- * ThemePreview.test.tsx — fixed queries to avoid ambiguous role matches
- */
+// src/components/Dashboard/ThemePreview/__tests__/ThemePreview.test.tsx
 import React from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
-import ThemePreview from "../ThemePreview";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import ThemePreview from "../../../../components/Dashboard/ThemePreview/ThemePreview"; // adjust path if needed
+
+afterEach(() => {
+  cleanup();
+  jest.clearAllMocks();
+});
 
 describe("ThemePreview", () => {
-  test("renders label, hex and apply button", () => {
-    render(<ThemePreview id="teal" label="Teal theme" selected={false} />);
+  it("renders label, primary hex and three swatches", () => {
+    const onSelect = jest.fn();
+    // Render the static 'Dark' theme (id 'dark' maps to #000000 in STATIC)
+    const { container } = render(
+      <ThemePreview id="dark" label="Dark" onSelect={onSelect} />
+    );
 
-    // label present
-    expect(screen.getByText(/Teal theme/i)).toBeInTheDocument();
+    // Label present
+    expect(screen.getByText("Dark")).toBeInTheDocument();
 
-    // hex text present (exact format depends on component; use contains #)
-    expect(screen.getByText(/#2F6F66/i)).toBeInTheDocument();
+    // Primary HEX appears at least twice (card area and previewActions)
+    const hexNodes = screen.getAllByText((content) => content.includes("#"));
+    expect(hexNodes.length).toBeGreaterThanOrEqual(2);
+    // Ensure the primary hex value is the expected #000000 for 'dark'
+    expect(hexNodes.some((n) => n.textContent === "#000000")).toBe(true);
 
-    // Use the button title attribute (less ambiguous than role)
-    const applyBtn = screen.getByTitle(/Apply Teal theme/i);
-    expect(applyBtn).toBeInTheDocument();
-    expect(applyBtn).not.toHaveAttribute("disabled");
+    // There should be three swatch divs inside the preview (20x20 squares)
+    const swatches = container.querySelectorAll(
+      'div[style*="width: 20px"][style*="height: 20px"]'
+    );
+    expect(swatches.length).toBe(3);
   });
 
-  test("calls onSelect when clicked or keyboard invoked", () => {
+  it("clicking the Apply button calls onSelect with { themeId } for static themes", () => {
     const onSelect = jest.fn();
+    render(<ThemePreview id="teal" label="Teal" onSelect={onSelect} />);
+
+    // Find the Apply button (text "Apply")
+    const applyButton = screen.getByRole("button", { name: /Apply/i });
+    fireEvent.click(applyButton);
+
+    // Expect onSelect called once with id and payload { themeId: id }
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledWith("teal", { themeId: "teal" });
+  });
+
+  it("card click and keyboard (Enter) invoke onSelect (respecting isCustom payload)", () => {
+    const onSelect = jest.fn();
+
+    // Custom theme: provide hex and isCustom true
+    const customHex = "#ABCDEF";
     render(
       <ThemePreview
-        id="light"
-        label="Light"
-        selected={false}
+        id="aditya"
+        label="Aditya"
+        hex={customHex}
+        isCustom
         onSelect={onSelect}
       />
     );
 
-    // The interactive wrapper is focusable and has accessible name via label.
-    const wrapper = screen.getByRole("button", { name: /Light/i });
-    fireEvent.click(wrapper);
-    expect(onSelect).toHaveBeenCalledWith("light");
+    // Card has aria-label "Select theme Aditya"
+    const card = screen.getByRole("button", { name: /Select theme Aditya/i });
+    // Click the card
+    fireEvent.click(card);
+    expect(onSelect).toHaveBeenCalledWith("aditya", { colorHex: customHex });
 
     onSelect.mockClear();
-    fireEvent.keyDown(wrapper, { key: "Enter", code: "Enter" });
-    expect(onSelect).toHaveBeenCalledWith("light");
+
+    // Press Enter while focused on card (simulate keyboard activation)
+    fireEvent.keyDown(card, { key: "Enter", code: "Enter", charCode: 13 });
+    expect(onSelect).toHaveBeenCalledWith("aditya", { colorHex: customHex });
   });
 
-  test("apply button disabled when selected", () => {
-    render(<ThemePreview id="dark" label="Dark" selected={true} />);
+  it("shows Delete button for custom themes and calls onDelete when clicked", () => {
+    const onDelete = jest.fn();
+    const onSelect = jest.fn();
+    const customHex = "#112233";
 
-    // The inner button shows "Applied" and has title "Selected" in the component
-    const appliedBtn = screen.getByTitle(/Selected/i);
-    expect(appliedBtn).toBeInTheDocument();
-    expect(appliedBtn).toBeDisabled();
+    render(
+      <ThemePreview
+        id="custom1"
+        label="Custom One"
+        hex={customHex}
+        isCustom
+        onSelect={onSelect}
+        onDelete={onDelete}
+      />
+    );
+
+    // Delete button should be visible
+    const deleteButton = screen.getByRole("button", { name: /Delete/i });
+    expect(deleteButton).toBeInTheDocument();
+
+    // Click Delete and expect onDelete called
+    fireEvent.click(deleteButton);
+    expect(onDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables Apply button when selected is true and shows 'Applied' text", () => {
+    const onSelect = jest.fn();
+    render(
+      <ThemePreview id="light" label="Light" selected onSelect={onSelect} />
+    );
+
+    // The Applied button should render and be disabled
+    const appliedButton = screen.getByRole("button", { name: /Applied/i });
+    expect(appliedButton).toBeInTheDocument();
+    expect(appliedButton).toBeDisabled();
+
+    // Important: Do NOT click the disabled button in the test.
+    // Instead assert that onSelect has not been called so far.
+    expect(onSelect).not.toHaveBeenCalled();
   });
 });

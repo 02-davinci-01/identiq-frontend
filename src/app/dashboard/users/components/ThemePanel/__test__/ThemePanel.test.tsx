@@ -1,42 +1,83 @@
-/**
- * ThemePanel.test.tsx — no require(), typed mocks
- */
-import * as React from "react";
-import { render, screen } from "@testing-library/react";
-import { ThemePanel } from "../ThemePanel";
+// src/app/dashboard/users/components/ThemePanel/__test__/ThemePanel.test.tsx
+import React from "react";
+import { render, screen, waitFor, cleanup } from "@testing-library/react";
+import ThemePanel from "../ThemePanel";
+import axios from "axios";
 
-jest.mock("recharts", () => {
-  return {
-    ResponsiveContainer: (props: { children?: React.ReactNode }) =>
-      React.createElement(
-        "div",
-        { "data-testid": "responsive" },
-        props.children
-      ),
-    PieChart: (props: { children?: React.ReactNode }) =>
-      React.createElement("div", { "data-testid": "piechart" }, props.children),
-    Pie: (props: { children?: React.ReactNode }) =>
-      React.createElement("div", { "data-testid": "pie" }, props.children),
-    Cell: () => React.createElement("div", { "data-testid": "cell" }),
-    Tooltip: () => React.createElement("div", { "data-testid": "tooltip" }),
-  };
-});
+// Fix: mock ResizeObserver so Recharts ResponsiveContainer won't crash
+class ResizeObserverMock {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+global.ResizeObserver = ResizeObserverMock;
+
+jest.mock("axios");
+const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe("ThemePanel", () => {
-  test("renders 'No theme data yet.' when data is empty", () => {
-    render(<ThemePanel data={[]} />);
-    expect(screen.getByText(/No theme data yet/i)).toBeInTheDocument();
-    expect(screen.getByTestId("responsive")).toBeInTheDocument();
+  beforeEach(() => {
+    mockedAxios.get.mockReset();
   });
 
-  test("renders legend items for provided data", () => {
-    const data = [
-      { name: "Teal", value: 3, color: "#2F6F66" },
-      { name: "Light", value: 5, color: "#c96a2b" },
-    ];
-    render(<ThemePanel data={data} />);
-    expect(screen.getByText(/Teal — 3/i)).toBeInTheDocument();
-    expect(screen.getByText(/Light — 5/i)).toBeInTheDocument();
-    expect(screen.getByTestId("piechart")).toBeInTheDocument();
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("renders canonical items and shows labels, counts and hexes", async () => {
+    const payload = {
+      ok: true,
+      items: [
+        { label: "Teal", count: 3, colorHex: "#2F6F66" },
+        { label: "Blue", count: 1, colorHex: "#2B65EC" },
+      ],
+    };
+
+    mockedAxios.get.mockResolvedValue({ status: 200, data: payload });
+
+    render(<ThemePanel />);
+
+    // Wait for labels to appear (async)
+    await waitFor(() => {
+      expect(screen.getByText(/Teal/i)).toBeInTheDocument();
+      expect(screen.getByText(/Blue/i)).toBeInTheDocument();
+    });
+
+    // counts
+    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByText("1")).toBeInTheDocument();
+
+    // hexes
+    expect(screen.getAllByText(/#/i).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("handles legacy counts object shape", async () => {
+    const payload = {
+      counts: { Light: 2, Dark: 4 },
+    };
+
+    mockedAxios.get.mockResolvedValue({ status: 200, data: payload });
+
+    render(<ThemePanel />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Light/i)).toBeInTheDocument();
+      expect(screen.getByText(/Dark/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByText("4")).toBeInTheDocument();
+  });
+
+  it("shows error message when fetch fails", async () => {
+    mockedAxios.get.mockRejectedValue(new Error("Network error"));
+
+    render(<ThemePanel />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Failed to fetch theme distribution/i)
+      ).toBeInTheDocument()
+    );
   });
 });

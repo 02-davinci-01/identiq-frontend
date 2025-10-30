@@ -2,12 +2,21 @@
 import React from "react";
 import styles from "@/app/dashboard/styles/dashboard.module.css";
 
-type Theme = { id: string; label: string; img: string; color: string };
+type StaticTheme = { id: string; label: string; img: string; color: string };
+type SelectPayload = { themeId?: string; colorHex?: string };
 
-/**
- * Reference themes array (replaces previous color/data).
- */
-const THEMES: Theme[] = [
+type Props = {
+  id: string;
+  label: string;
+  selected?: boolean;
+  onSelect?: (id?: string, payload?: SelectPayload) => void;
+  applyLabel?: string;
+  hex?: string; // if provided, use this hex (for custom themes)
+  isCustom?: boolean;
+  onDelete?: () => void;
+};
+
+const STATIC: StaticTheme[] = [
   { id: "teal", label: "Teal", img: "/themeChange.webp", color: "#2F6F66" },
   { id: "light", label: "Light", img: "/themeChange.webp", color: "#C96A2B" },
   { id: "dark", label: "Dark", img: "/themeChange.webp", color: "#000000" },
@@ -19,37 +28,73 @@ export default function ThemePreview({
   selected = false,
   onSelect,
   applyLabel = "Apply",
-}: {
-  id: string;
-  label: string;
-  selected?: boolean;
-  onSelect?: (id: string) => void;
-  applyLabel?: string;
-}) {
-  const handleClick = () => {
-    if (typeof onSelect === "function") onSelect(id);
-  };
+  hex,
+  isCustom = false,
+  onDelete,
+}: Props) {
+  // Determine primary color: prefer hex prop (custom), otherwise map static id
+  const rawPrimary =
+    (hex ?? STATIC.find((t) => t.id === id)?.color) ||
+    generateColorsFromId(id)[0];
+  const primary = rawPrimary.toUpperCase();
 
-  // Find theme hex from reference array
-  const theme = THEMES.find((t) => t.id === id);
-  const primary = theme?.color ?? generateColorsFromId(id)[0];
-
-  // Special handling for dark theme: first swatch lighter grey, then darker, then darkest.
   const swatches =
     primary.toUpperCase() === "#000000"
-      ? ["#4D4D4D", "#333333", "#1A1A1A"] // light -> darker -> darkest
+      ? ["#4D4D4D", "#333333", "#1A1A1A"]
       : [shadeHex(primary, 12), shadeHex(primary, -6), shadeHex(primary, -18)];
+
+  function textColorForBg(hexStr: string) {
+    try {
+      const h = hexStr.replace("#", "");
+      const full =
+        h.length === 3
+          ? h
+              .split("")
+              .map((c) => c + c)
+              .join("")
+          : h;
+      const num = parseInt(full, 16);
+      const r = (num >> 16) & 255;
+      const g = (num >> 8) & 255;
+      const b = num & 255;
+      const lum = 0.2126 * (r / 255) + 0.7152 * (g / 255) + 0.0722 * (b / 255);
+      return lum > 0.5 ? "#111" : "#fff";
+    } catch {
+      return "#fff";
+    }
+  }
+
+  const applyTextColor = textColorForBg(primary);
+
+  const handleApplyFromButton = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (typeof onSelect === "function") {
+      const payload = isCustom ? { colorHex: hex } : { themeId: id };
+      onSelect(id, payload);
+    }
+  };
+
+  const handleApplyFromCard = () => {
+    if (typeof onSelect === "function") {
+      const payload = isCustom ? { colorHex: hex } : { themeId: id };
+      onSelect(id, payload);
+    }
+  };
 
   return (
     <div
       role="button"
-      aria-pressed={selected}
-      onClick={handleClick}
       tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") handleClick();
-      }}
+      aria-label={`Select theme ${label}`}
       className={`${styles.themePreview} ${selected ? styles.selected : ""}`}
+      onClick={handleApplyFromCard}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleApplyFromCard();
+        }
+      }}
+      style={{ cursor: "pointer" }}
     >
       <div
         className={styles.previewBox}
@@ -60,7 +105,6 @@ export default function ThemePreview({
           padding: 12,
         }}
       >
-        {/* Palette card */}
         <div
           aria-hidden="true"
           style={{
@@ -75,7 +119,6 @@ export default function ThemePreview({
             border: "1px solid rgba(0,0,0,0.06)",
           }}
         >
-          {/* Large swatch */}
           <div
             style={{
               background: primary,
@@ -92,7 +135,6 @@ export default function ThemePreview({
               gap: 10,
             }}
           >
-            {/* small palette squares */}
             <div
               style={{
                 display: "grid",
@@ -114,7 +156,6 @@ export default function ThemePreview({
               ))}
             </div>
 
-            {/* bold "HEX" then hex code */}
             <div style={{ flex: 1 }}>
               <div
                 style={{
@@ -126,13 +167,7 @@ export default function ThemePreview({
               >
                 <strong>HEX</strong>
               </div>
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "#666",
-                  marginTop: 4,
-                }}
-              >
+              <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
                 {primary.toUpperCase()}
               </div>
             </div>
@@ -141,31 +176,63 @@ export default function ThemePreview({
       </div>
 
       <div className={styles.previewActions}>
-        <div className={styles.labelStrong}>{label}</div>
-        <button
-          className={styles.btnSmall}
-          onClick={(e) => {
-            e.stopPropagation();
-            handleClick();
-          }}
-          disabled={selected}
-          aria-disabled={selected}
-          title={selected ? "Selected" : `Apply ${label}`}
-        >
-          {selected ? "Applied" : applyLabel}
-        </button>
+        {/* show user-provided name (label) and hex as requested */}
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <div className={styles.labelStrong} style={{ marginBottom: 4 }}>
+            {label}
+          </div>
+          <div style={{ fontSize: 12, color: "#666" }}>
+            {primary.toUpperCase()}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button
+            onClick={handleApplyFromButton}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 10,
+              border: "none",
+              background: primary,
+              color: applyTextColor,
+              fontWeight: 700,
+              cursor: "pointer",
+              boxShadow: selected ? "0 6px 14px rgba(0,0,0,0.18)" : "none",
+            }}
+            title={selected ? "Selected" : `Apply ${label}`}
+            aria-pressed={selected}
+            disabled={selected}
+          >
+            {selected ? "Applied" : applyLabel}
+          </button>
+
+          {isCustom && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (typeof onDelete === "function") onDelete();
+              }}
+              title="Delete custom theme"
+              style={{
+                padding: "6px 8px",
+                borderRadius: 8,
+                border: "1px solid rgba(0,0,0,0.06)",
+                background: "#fff",
+                color: "#e11d48",
+                cursor: "pointer",
+                fontWeight: 700,
+              }}
+            >
+              Delete
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-/* -------------------------
-   Helper functions
-   ------------------------- */
-
-/**
- * Deterministically generate an array of hex colors from an id (fallback).
- */
+/* helpers (unchanged) */
 function generateColorsFromId(seed: string): string[] {
   let h = 2166136261 >>> 0;
   for (let i = 0; i < seed.length; i++) {
@@ -184,9 +251,6 @@ function generateColorsFromId(seed: string): string[] {
   return colors;
 }
 
-/**
- * Convert HSL to hex (inputs: h 0-360, s/l 0-100)
- */
 function hslToHex(h: number, s: number, l: number): string {
   s /= 100;
   l /= 100;
@@ -200,9 +264,6 @@ function hslToHex(h: number, s: number, l: number): string {
   return `#${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`.toUpperCase();
 }
 
-/**
- * Shade a hex color lighter or darker by a percentage.
- */
 function shadeHex(hex: string, percent: number): string {
   const h = hex.replace("#", "");
   const full =

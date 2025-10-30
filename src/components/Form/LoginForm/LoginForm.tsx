@@ -6,7 +6,7 @@ import styles from "./loginForm.module.css";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import LModal from "@/components/Modal/LoginModal/LoginModal"; // ✅ Only LModal imported now
+import LModal from "@/components/Modal/LoginModal/LoginModal";
 
 export default function LoginForm() {
   const router = useRouter();
@@ -23,6 +23,10 @@ export default function LoginForm() {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [captchaInput, setCaptchaInput] = useState("");
   const [captchaLoading, setCaptchaLoading] = useState(false);
+
+  // UI notification states
+  const [toast, setToast] = useState<{ msg: string; id: number } | null>(null);
+  const [breadcrumbMsg, setBreadcrumbMsg] = useState<string | null>(null);
 
   const BACKEND_BASE =
     (process.env.NEXT_PUBLIC_API_URL as string) || "https://localhost:3001";
@@ -54,6 +58,7 @@ export default function LoginForm() {
         setCaptchaSvg(body.svg);
         setCaptchaToken(body.token);
         setCaptchaInput("");
+        setBreadcrumbMsg(null);
       } else {
         if (
           typeof res.data === "string" &&
@@ -62,10 +67,12 @@ export default function LoginForm() {
           setCaptchaSvg(res.data);
           setCaptchaToken(null);
           setCaptchaInput("");
+          setBreadcrumbMsg(null);
         } else {
           setCaptchaSvg(null);
           setCaptchaToken(null);
           setError("Failed to load captcha from server.");
+          setBreadcrumbMsg("Failed to load captcha");
         }
       }
     } catch (err) {
@@ -73,6 +80,7 @@ export default function LoginForm() {
       setError("Unable to load captcha. Try refreshing the page.");
       setCaptchaSvg(null);
       setCaptchaToken(null);
+      setBreadcrumbMsg("Unable to load captcha");
     } finally {
       setCaptchaLoading(false);
     }
@@ -82,6 +90,16 @@ export default function LoginForm() {
     fetchCaptcha();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // helper to show a toast
+  const pushToast = (msg: string, duration = 4500) => {
+    const id = Date.now();
+    setToast({ msg, id });
+    // auto-dismiss
+    setTimeout(() => {
+      setToast((t) => (t && t.id === id ? null : t));
+    }, duration);
+  };
 
   const verifyCaptcha = async (): Promise<{
     ok: boolean;
@@ -136,7 +154,12 @@ export default function LoginForm() {
     try {
       const verify = await verifyCaptcha();
       if (!verify.ok) {
-        setError(verify.message || "Captcha verification failed.");
+        const msg = verify.message || "Captcha verification failed.";
+        // show inline error + breadcrumb + toast
+        setError(msg);
+        setBreadcrumbMsg("Captcha incorrect — try again or refresh.");
+        pushToast("Captcha incorrect. A new captcha has been requested.");
+        // refresh captcha for the user immediately
         await fetchCaptcha();
         setLoading(false);
         return;
@@ -217,12 +240,12 @@ export default function LoginForm() {
     }
 
     return (
-      <div style={{ display: "inline-block", lineHeight: 0 }}>
+      <div className={styles.captchaImgWrap}>
         <Image
           src={captchaSvg}
           alt="captcha"
           width={160}
-          height={56}
+          height={60}
           style={{ display: "block", maxWidth: "100%", height: "auto" }}
         />
       </div>
@@ -299,26 +322,53 @@ export default function LoginForm() {
               <span className={styles.loginLabel}>Captcha</span>
 
               <div className={styles.captchaRow}>
-                <div className={styles.captchaBox} aria-hidden={captchaLoading}>
+                <div
+                  className={`${styles.captchaBox} ${
+                    captchaLoading ? styles.captchaLoadingState : ""
+                  }`}
+                  aria-hidden={captchaLoading}
+                >
                   {captchaLoading ? (
                     <div className={styles.captchaLoading}>Loading...</div>
                   ) : (
                     renderCaptcha()
                   )}
+
+                  {/* Overlay refresh button (now themed via CSS) */}
                 </div>
 
                 <div className={styles.captchaControls}>
+                  {/* Secondary refresh control kept for keyboard users */}
                   <button
                     type="button"
-                    className={`btn btn-ghost ${styles.captchaRefresh}`}
+                    className={`${styles.captchaRefresh} ${styles.captchaRefreshInline}`}
                     aria-label="Refresh captcha"
                     onClick={fetchCaptcha}
                     disabled={captchaLoading}
                   >
-                    <RotateCw size={16} /> Refresh
+                    <RotateCw size={16} />{" "}
+                    <span className={styles.captchaRefreshText}>Refresh</span>
                   </button>
                 </div>
               </div>
+
+              {/* breadcrumb-style inline message */}
+              {breadcrumbMsg && (
+                <div
+                  className={styles.captchaBreadcrumb}
+                  role="status"
+                  aria-live="polite"
+                >
+                  {breadcrumbMsg}{" "}
+                  <button
+                    type="button"
+                    onClick={fetchCaptcha}
+                    className={styles.captchaBreadcrumbAction}
+                  >
+                    Refresh
+                  </button>
+                </div>
+              )}
 
               <input
                 className={`${styles.loginInput} ${styles.captchaInput}`}
@@ -365,11 +415,25 @@ export default function LoginForm() {
         </div>
       </div>
 
-      {/* Forgot password modal */}
       <LModal
         open={showForgotModal}
         onClose={() => setShowForgotModal(false)}
       />
+
+      {/* Simple toast (top-right) */}
+      {toast && (
+        <div role="status" aria-live="polite" className={styles.toast}>
+          <div className={styles.toastTitle}>Notice</div>
+          <div className={styles.toastMsg}>{toast.msg}</div>
+          <button
+            aria-label="Dismiss"
+            onClick={() => setToast(null)}
+            className={styles.toastClose}
+          >
+            ×
+          </button>
+        </div>
+      )}
     </>
   );
 }

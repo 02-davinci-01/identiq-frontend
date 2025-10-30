@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import styles from "@/app/dashboard/styles/dashboard.module.css";
 import { UsersTable } from "./components/UsersTable/UsersTable";
-import { ThemeChart } from "./components/ThemeChart/ThemeChart";
+import ThemeChart from "./components/ThemeChart/ThemeChart";
 import { RetryLog } from "./components/RetryLog/RetryLog";
 import { useInfiniteExperimentalUsers } from "./hooks/useInfiniteExperimentalUsers";
 import { applyThemeVars } from "./utils/themeUtils";
@@ -14,6 +14,52 @@ import { GenericModal } from "@/components/Modal/DashboardModal/DashboardModal";
 const STORAGE_KEY = "dashboardTheme";
 const BACKEND_BASE =
   process.env.NEXT_PUBLIC_API_URL || "https://localhost:3001";
+
+/**
+ * Attempt to apply a persisted theme object (JSON saved by Dashboard).
+ * If not present or invalid, fall back to previous behavior:
+ *  - if stored value is "#RRGGBB" apply directly
+ *  - otherwise treat as static id -> map to canonical hex
+ */
+function applyPersistedOrFallbackTheme() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+
+    // Try JSON first (dashboard persists { type, themeId?, colorHex, label })
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.colorHex) {
+        const hex = String(parsed.colorHex).trim().toUpperCase();
+        if (/^#([0-9A-F]{6})$/.test(hex)) {
+          applyThemeVars(hex);
+          return;
+        }
+      }
+    } catch {
+      // not JSON — continue to fallback parsing
+    }
+
+    // Fallback: old string formats
+    const maybe = raw.trim();
+    if (/^#([0-9A-F]{6})$/i.test(maybe)) {
+      applyThemeVars(maybe.toUpperCase());
+      return;
+    }
+
+    // treat as static id (teal/light/dark)
+    const mapping: Record<string, string> = {
+      teal: "#2f6f66",
+      light: "#c96a2b",
+      dark: "#000000",
+    };
+    const key = maybe.toLowerCase();
+    applyThemeVars(mapping[key] ?? mapping.light);
+  } catch (err) {
+    // swallow errors — don't crash the page for theme issues
+    console.warn("apply theme failed", err);
+  }
+}
 
 export default function ExperimentalPage() {
   // server-reported total number of users (optional, may be null while loading)
@@ -71,21 +117,17 @@ export default function ExperimentalPage() {
   const [pendingUserId, setPendingUserId] = useState<string | null>(null);
   const [pendingUserName, setPendingUserName] = useState<string | null>(null);
 
-  // apply saved theme on mount
+  // apply persisted theme on mount and listen for changes via storage event
   useEffect(() => {
-    try {
-      const storedId = localStorage.getItem(STORAGE_KEY);
-      if (!storedId) return;
-      const mapping: Record<string, string> = {
-        teal: "#2f6f66",
-        light: "#c96a2b",
-        dark: "#000000",
-      };
-      const color = mapping[storedId] ?? mapping["light"];
-      applyThemeVars(color);
-    } catch {
-      // ignore
+    applyPersistedOrFallbackTheme();
+
+    function onStorage(e: StorageEvent) {
+      if (e.key === STORAGE_KEY) {
+        applyPersistedOrFallbackTheme();
+      }
     }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   // Try to locate a candidate current-user identifier from several runtime sources.

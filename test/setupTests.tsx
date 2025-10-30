@@ -19,9 +19,48 @@ try {
   if (typeof global.TextDecoder === "undefined")
     global.TextDecoder = TextDecoder;
 } catch (err) {
-  // if require fails (very old Node), fall back silently — MSW may still need an npm polyfill
+  // if require fails (very old Node), fall back silently
   // e.g. `npm i text-encoding` and then:
   // const { TextEncoder, TextDecoder } = require('text-encoding');
+}
+
+/**
+ * Minimal ResizeObserver mock so components that rely on it (eg. recharts'
+ * ResponsiveContainer) don't throw in jsdom.
+ *
+ * This mock is intentionally small — it provides the observe/unobserve/disconnect
+ * methods used by libraries, but performs no layout measurement.
+ */
+class ResizeObserverMock {
+  observe() {
+    /* no-op */
+  }
+  unobserve() {
+    /* no-op */
+  }
+  disconnect() {
+    /* no-op */
+  }
+}
+// @ts-ignore
+global.ResizeObserver = global.ResizeObserver || ResizeObserverMock;
+
+/**
+ * Basic window.matchMedia stub (some UI libs check it).
+ * Returns an object with add/remove listener methods compatible with older APIs.
+ */
+if (typeof window !== "undefined" && !window.matchMedia) {
+  // @ts-ignore
+  window.matchMedia = (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {}, // deprecated API
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  });
 }
 
 /** Simple next/image mock (no JSX allowed if this file is .ts — we assume .tsx) */
